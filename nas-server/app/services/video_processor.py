@@ -82,6 +82,56 @@ class FrameExtractor:
         self.cache_dir = settings.FRAME_CACHE_DIR
         os.makedirs(self.cache_dir, exist_ok=True)
     
+    def _get_video_info(self, filepath: str) -> Tuple[float, float, int]:
+        """使用 ffprobe 获取视频信息"""
+        try:
+            cmd = [
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                '-show_entries', 'stream=r_frame_rate,duration,nb_frames',
+                '-show_entries', 'format=duration',
+                '-of', 'json', filepath
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            data = json.loads(result.stdout)
+            
+            # 获取时长
+            duration = 0.0
+            if 'format' in data and 'duration' in data['format']:
+                duration = float(data['format']['duration'])
+            elif 'streams' in data and len(data['streams']) > 0:
+                stream = data['streams'][0]
+                if 'duration' in stream:
+                    duration = float(stream['duration'])
+            
+            # 获取帧率
+            fps = 0.0
+            if 'streams' in data and len(data['streams']) > 0:
+                stream = data['streams'][0]
+                if 'r_frame_rate' in stream:
+                    # 帧率可能是 "30000/1001" 这样的格式
+                    rate = stream['r_frame_rate']
+                    if '/' in rate:
+                        num, den = rate.split('/')
+                        fps = float(num) / float(den)
+                    else:
+                        fps = float(rate)
+            
+            # 获取总帧数
+            total_frames = 0
+            if 'streams' in data and len(data['streams']) > 0:
+                stream = data['streams'][0]
+                if 'nb_frames' in stream:
+                    total_frames = int(stream['nb_frames'])
+            
+            # 如果总帧数为0，用时长和帧率计算
+            if total_frames == 0 and duration > 0 and fps > 0:
+                total_frames = int(duration * fps)
+            
+            return duration, fps, total_frames
+        except Exception as e:
+            print(f"Error in _get_video_info: {e}")
+            return 0.0, 0.0, 0
+    
     def extract_frames(self, video_id: int, force: bool = False) -> List[dict]:
         db = SessionLocal()
         extracted_frames = []
@@ -108,17 +158,37 @@ class FrameExtractor:
                     os.remove(os.path.join(video_cache_dir, f))
             os.makedirs(video_cache_dir, exist_ok=True)
             
-            duration = video.duration or 0
-            target_frame_count = self._calculate_frame_count(duration)
+            # 使用 ffprobe 获取准确的视频信息
+            duration, fps, total_frames = self._get_video_info(video.filepath)
             
-            cap = cv2.VideoCapture(video.filepath)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            cap.release()
+            # 如果 ffprobe 获取失败，尝试用数据库中的时长
+            if duration == 0 and video.duration:
+                duration = video.duration
+            
+            target_frame_count = self._calculate_frame_count(duration)
             
             print(f"Video {video_id}: duration={duration:.1f}s, fps={fps}, total_frames={total_frames}, target_frames={target_frame_count}")
             
-            # 直接按时间均匀分布抽帧
+            # 如果还是获取不到总帧数，用时长估算
+            if total_frames == 0 and duration > 0 and fps > 0:
+                total_frames = int(duration * fps)
+            
+            if total_frames == 0:
+                print(f"Cannot determine total frames for video {video_id}, trying OpenCV")
+                # 尝试用 OpenCV
+                cap = cv2.VideoCapture(video.filepath)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                print(f"OpenCV: fps={fps}, total_frames={total_frames}")
+            
+            if total_frames == 0:
+                print(f"Failed to get video info for {video_id}")
+                video.status = VideoStatus.FAILED
+                db.commit()
+                return []
+            
+            # 按时间均匀分布抽帧
             selected_frames = self._generate_time_based_frames(total_frames, fps, duration, target_frame_count)
             
             print(f"Selected {len(selected_frames)} frames at positions: {selected_frames}")
