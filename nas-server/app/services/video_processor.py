@@ -143,7 +143,11 @@ class FrameExtractor:
         try:
             video = db.query(Video).filter(Video.id == video_id).first()
             if not video:
+                print(f"Video {video_id} not found")
                 return []
+            
+            print(f"Processing video: {video.filepath}")
+            print(f"File exists: {os.path.exists(video.filepath)}")
             
             existing_frames = db.query(Frame).filter(Frame.video_id == video_id).count()
             if existing_frames > 0 and not force:
@@ -181,6 +185,11 @@ class FrameExtractor:
                 print(f"Cannot determine total frames for video {video_id}, trying OpenCV")
                 # 尝试用 OpenCV
                 cap = cv2.VideoCapture(video.filepath)
+                if not cap.isOpened():
+                    print(f"OpenCV failed to open video: {video.filepath}")
+                    video.status = VideoStatus.FAILED
+                    db.commit()
+                    return []
                 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 fps = cap.get(cv2.CAP_PROP_FPS)
                 cap.release()
@@ -198,6 +207,13 @@ class FrameExtractor:
             print(f"Selected {len(selected_frames)} frames at positions: {selected_frames}")
             
             cap = cv2.VideoCapture(video.filepath)
+            if not cap.isOpened():
+                print(f"OpenCV failed to open video for reading: {video.filepath}")
+                video.status = VideoStatus.FAILED
+                db.commit()
+                cap.release()
+                return []
+            
             for idx, frame_pos in enumerate(selected_frames):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_pos)
                 ret, frame = cap.read()
@@ -252,6 +268,8 @@ class FrameExtractor:
             
         except Exception as e:
             print(f"Error extracting frames: {e}")
+            import traceback
+            traceback.print_exc()
             db.rollback()
             try:
                 video.status = VideoStatus.FAILED
