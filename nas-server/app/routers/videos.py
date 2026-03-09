@@ -92,7 +92,7 @@ def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(g
 
 
 @router.post("/start-process")
-def start_process(video_ids: List[int], db: Session = Depends(get_db)):
+def start_process(video_ids: List[int], force: bool = False, db: Session = Depends(get_db)):
     from app.services.video_processor import FrameExtractor
     
     extractor = FrameExtractor()
@@ -105,13 +105,28 @@ def start_process(video_ids: List[int], db: Session = Depends(get_db)):
             continue
         
         if video.status not in [VideoStatus.PENDING, VideoStatus.READY]:
-            results.append({"video_id": video_id, "success": False, "error": f"Video status is {video.status}"})
-            continue
+            if not force:
+                results.append({"video_id": video_id, "success": False, "error": f"Video status is {video.status}"})
+                continue
         
-        extractor.extract_frames(video_id)
+        extractor.extract_frames(video_id, force=force)
         results.append({"video_id": video_id, "success": True})
     
     return {"results": results}
+
+
+@router.post("/{video_id}/re-extract")
+def re_extract_frames(video_id: int, db: Session = Depends(get_db)):
+    from app.services.video_processor import FrameExtractor
+    
+    extractor = FrameExtractor()
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    frames = extractor.extract_frames(video_id, force=True)
+    
+    return {"success": True, "frames_extracted": len(frames)}
 
 
 @router.post("/adopt")

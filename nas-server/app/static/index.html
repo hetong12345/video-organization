@@ -640,19 +640,21 @@
       </template>
     </main>
     
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px">
       <div v-if="currentVideo">
-        <p style="margin-bottom: 16px;"><strong>文件名:</strong> {{ currentVideo.filename }}</p>
-        <p style="margin-bottom: 16px;"><strong>状态:</strong> <span class="status-badge" :class="currentVideo.status">{{ getStatusText(currentVideo.status) }}</span></p>
-        <p style="margin-bottom: 16px;"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</p>
-        <div style="margin-top: 20px;">
+        <p style="margin-bottom: 12px;"><strong>文件名:</strong> {{ currentVideo.filename }}</p>
+        <p style="margin-bottom: 12px;"><strong>时长:</strong> {{ currentVideo.duration ? (currentVideo.duration / 60).toFixed(1) + ' 分钟' : '未知' }}</p>
+        <p style="margin-bottom: 12px;"><strong>状态:</strong> <span class="status-badge" :class="currentVideo.status">{{ getStatusText(currentVideo.status) }}</span></p>
+        <p style="margin-bottom: 12px;"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</p>
+        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
           <strong>抽帧图片 ({{ currentVideo.frames?.length || 0 }})</strong>
-          <div class="video-grid" style="margin-top: 12px;">
-            <div v-for="frame in currentVideo.frames" :key="frame.id" class="video-card">
-              <img :src="`/api/frames/${frame.id}/image`" class="video-thumbnail">
-              <div class="video-info">
-                <div style="font-size: 12px; color: #71717a;">{{ frame.timestamp?.toFixed(1) }}s</div>
-              </div>
+          <button class="action-btn secondary" @click="reExtractFrames" style="padding: 6px 14px; font-size: 12px;">🔄 重新抽帧</button>
+        </div>
+        <div class="video-grid" style="margin-top: 12px;">
+          <div v-for="frame in currentVideo.frames" :key="frame.id" class="video-card">
+            <img :src="`/api/frames/${frame.id}/image`" class="video-thumbnail">
+            <div class="video-info">
+              <div style="font-size: 12px; color: #71717a;">{{ frame.timestamp?.toFixed(1) }}s</div>
             </div>
           </div>
         </div>
@@ -746,6 +748,17 @@
             dialogTitle.value = video.filename;
             dialogVisible.value = true;
           } catch (e) { ElMessage.error('加载失败'); }
+        };
+        
+        const reExtractFrames = async () => {
+          if (!currentVideo.value) return;
+          try {
+            await api.post(`/api/videos/${currentVideo.value.id}/re-extract`);
+            ElMessage.success('重新抽帧完成');
+            const framesRes = await api.get(`/api/videos/${currentVideo.value.id}/frames`);
+            currentVideo.value.frames = framesRes.data;
+            loadVideos();
+          } catch (e) { ElMessage.error('重新抽帧失败'); }
         };
         
         const startProcess = async () => {
@@ -855,7 +868,7 @@
           videoFilter, tasks, workers, clusters, reviewVideos, selectedReviewVideos,
           clusterNames, reviewNames, dialogVisible, dialogTitle, currentVideo,
           loadDashboard, loadDirectories, toggleDir, scanDirectories, loadVideos,
-          toggleVideo, showVideoDetail, startProcess, loadClusters, nameCluster,
+          toggleVideo, showVideoDetail, reExtractFrames, startProcess, loadClusters, nameCluster,
           loadReviewVideos, adoptVideo, adoptSelected, loadTasks, retryTask, loadWorkers,
           getStatusText, getTaskTypeText, getTaskStatusText
         };
