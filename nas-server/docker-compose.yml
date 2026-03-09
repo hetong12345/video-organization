@@ -25,6 +25,9 @@ services:
         condition: service_healthy
     networks:
       - video-org-network
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash"]
 
   db:
     image: pgvector/pgvector:pg16
