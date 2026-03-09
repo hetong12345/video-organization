@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 from app.database import get_db
-from app.models import Video, Frame, VideoStatus
+from app.models import Video, Frame, Task, VideoStatus, TaskType, TaskStatus
 from app.schemas import VideoCreate, VideoResponse, VideoListResponse, FrameResponse
 from app.config import settings
 
@@ -73,7 +73,6 @@ def get_video_frames(video_id: int, db: Session = Depends(get_db)):
 @router.post("/scan")
 def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(get_db)):
     from app.services.video_processor import VideoScanner
-    from app.services.task_manager import task_manager
     
     if directories is None:
         directories = [settings.RAW_VIDEO_DIR]
@@ -87,28 +86,76 @@ def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(g
         scanner = VideoScanner(directory)
         new_videos = scanner.scan_directory()
         
-        for video_info in new_videos:
-            task_manager.extractor.extract_frames(video_info['id'])
-        
         results.append({"directory": directory, "videos": len(new_videos)})
+    
+    return {"results": results}
+
+
+@router.post("/start-process")
+def start_process(video_ids: List[int], db: Session = Depends(get_db)):
+    from app.services.video_processor import FrameExtractor
+    
+    extractor = FrameExtractor()
+    results = []
+    
+    for video_id in video_ids:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
+            continue
+        
+        if video.status not in [VideoStatus.PENDING, VideoStatus.READY]:
+            results.append({"video_id": video_id, "success": False, "error": f"Video status is {video.status}"})
+            continue
+        
+        extractor.extract_frames(video_id)
+        results.append({"video_id": video_id, "success": True})
+    
+    return {"results": results}
+
+
+@router.post("/adopt")
+def adopt_videos(
+    video_ids: List[int],
+    custom_names: Optional[dict] = None,
+    db: Session = Depends(get_db)
+):
+    results = []
+    
+    for video_id in video_ids:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
+            continue
+        
+        if custom_names and video_id in custom_names:
+            video.recommended_name = custom_names[video_id]
+        
+        video.status = VideoStatus.COMPLETED
+        db.commit()
+        results.append({"video_id": video_id, "success": True})
     
     return {"results": results}
 
 
 @router.get("/directories")
 def list_video_directories():
-    from app.services.task_manager import task_manager
-    
     dirs = []
+    if not os.path.exists('/media'):
+        return {"directories": dirs}
+    
     for root, subdirs, files in os.walk('/media'):
         for subdir in subdirs:
             full_path = os.path.join(root, subdir)
-            video_count = sum(1 for f in os.listdir(full_path) 
-                            if os.path.splitext(f)[1].lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'})
-            if video_count > 0:
-                dirs.append({
-                    "path": full_path,
-                    "video_count": video_count
-                })
+            try:
+                video_count = sum(1 for f in os.listdir(full_path) 
+                                if os.path.splitext(f)[1].lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'})
+                if video_count > 0:
+                    dirs.append({
+                        "path": full_path,
+                        "video_count": video_count
+                    })
+            except:
+                pass
     
     return {"directories": dirs}
