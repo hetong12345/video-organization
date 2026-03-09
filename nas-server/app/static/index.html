@@ -422,12 +422,21 @@
           if (!currentVideo.value) return;
           reExtracting.value = true;
           try {
-            await api.post(`/api/videos/${currentVideo.value.id}/re-extract`);
-            ElMessage.success('重新抽帧完成');
-            const fRes = await api.get(`/api/videos/${currentVideo.value.id}/frames`);
+            const res = await api.post(`/api/videos/${currentVideo.value.id}/re-extract`);
+            ElMessage.success(`重新抽帧完成，共 ${res.data.frames_extracted} 帧`);
+            // 重新加载视频详情和帧
+            const [vRes, fRes] = await Promise.all([
+              api.get(`/api/videos/${currentVideo.value.id}`),
+              api.get(`/api/videos/${currentVideo.value.id}/frames`)
+            ]);
+            currentVideo.value = vRes.data;
             frames.value = fRes.data;
             loadVideos();
-          } catch (e) { ElMessage.error('重新抽帧失败'); }
+            loadStats();
+          } catch (e) { 
+            console.error('reExtract error:', e);
+            ElMessage.error('重新抽帧失败: ' + (e.response?.data?.detail || e.message));
+          }
           reExtracting.value = false;
         };
         

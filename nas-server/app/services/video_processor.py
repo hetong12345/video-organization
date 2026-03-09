@@ -115,9 +115,12 @@ class FrameExtractor:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
             
-            scene_changes = self._detect_scene_changes_fast(video.filepath, total_frames, fps, target_frame_count)
+            print(f"Video {video_id}: duration={duration:.1f}s, fps={fps}, total_frames={total_frames}, target_frames={target_frame_count}")
             
-            selected_frames = self._distribute_frames(scene_changes, target_frame_count, total_frames)
+            # 直接按时间均匀分布抽帧
+            selected_frames = self._generate_time_based_frames(total_frames, fps, duration, target_frame_count)
+            
+            print(f"Selected {len(selected_frames)} frames at positions: {selected_frames}")
             
             cap = cv2.VideoCapture(video.filepath)
             for idx, frame_pos in enumerate(selected_frames):
@@ -125,6 +128,7 @@ class FrameExtractor:
                 ret, frame = cap.read()
                 
                 if not ret:
+                    print(f"Failed to read frame at position {frame_pos}")
                     continue
                 
                 frame_path = os.path.join(video_cache_dir, f"frame_{idx:04d}.jpg")
@@ -165,10 +169,20 @@ class FrameExtractor:
                 db.add(tag_task)
                 video.status = VideoStatus.PENDING
                 db.commit()
+                print(f"Extracted {len(extracted_frames)} frames for video {video_id}")
+            else:
+                video.status = VideoStatus.FAILED
+                db.commit()
+                print(f"No frames extracted for video {video_id}")
             
         except Exception as e:
             print(f"Error extracting frames: {e}")
             db.rollback()
+            try:
+                video.status = VideoStatus.FAILED
+                db.commit()
+            except:
+                pass
         finally:
             db.close()
         
@@ -182,71 +196,28 @@ class FrameExtractor:
         count = int(minutes * self.FRAMES_PER_MINUTE)
         return max(self.MIN_FRAMES, min(count, self.MAX_FRAMES))
     
-    def _detect_scene_changes_fast(self, filepath: str, total_frames: int, fps: float, target_count: int) -> List[int]:
-        try:
-            cmd = [
-                'ffmpeg', '-i', filepath, '-filter_complex',
-                f"select='gt(scene,0.4)',showinfo",
-                '-f', 'null', '-'
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, stderr=subprocess.STDOUT, timeout=60)
-            
-            scene_frames = []
-            for line in result.stdout.split('\n'):
-                if 'pts_time' in line:
-                    try:
-                        time_str = line.split('pts_time:')[1].split()[0]
-                        time = float(time_str)
-                        frame_num = int(time * fps) if fps > 0 else 0
-                        if 0 <= frame_num < total_frames:
-                            scene_frames.append(frame_num)
-                    except:
-                        pass
-            
-            if len(scene_frames) < 2:
-                return self._generate_uniform_frames(total_frames, target_count)
-            
-            return sorted(scene_frames)
-        except Exception as e:
-            print(f"Error detecting scene changes: {e}")
-            return self._generate_uniform_frames(total_frames, target_count)
-    
-    def _generate_uniform_frames(self, total_frames: int, count: int) -> List[int]:
+    def _generate_time_based_frames(self, total_frames: int, fps: float, duration: float, count: int) -> List[int]:
+        """按时间均匀分布生成帧位置"""
         if total_frames <= 0 or count <= 0:
             return [0]
         
-        step = max(1, total_frames // count)
-        frames = list(range(0, total_frames, step))
-        return frames[:count]
-    
-    def _distribute_frames(self, scene_changes: List[int], target_count: int, total_frames: int) -> List[int]:
-        if len(scene_changes) <= target_count:
-            return scene_changes
-        
-        selected = []
-        selected.append(scene_changes[0])
-        
-        step = len(scene_changes) // (target_count - 1)
-        for i in range(1, target_count - 1):
-            idx = min(i * step, len(scene_changes) - 1)
-            selected.append(scene_changes[idx])
-        
-        selected.append(scene_changes[-1])
-        
-        selected = sorted(list(set(selected)))
-        
-        if len(selected) > target_count:
-            selected = self._reduce_frames(selected, target_count)
-        
-        return selected
-    
-    def _reduce_frames(self, frames: List[int], target: int) -> List[int]:
-        if len(frames) <= target:
+        # 如果视频时长有效，按时间均匀分布
+        if duration > 0 and fps > 0:
+            # 在视频时长内均匀分布时间点
+            time_positions = []
+            for i in range(count):
+                # 从 5% 到 95% 的时间范围，避免开头和结尾
+                ratio = 0.05 + (0.9 * i / max(count - 1, 1))
+                time_pos = duration * ratio
+                frame_pos = int(time_pos * fps)
+                frame_pos = max(0, min(frame_pos, total_frames - 1))
+                time_positions.append(frame_pos)
+            return sorted(list(set(time_positions)))
+        else:
+            # 如果时长未知，按帧数均匀分布
+            step = total_frames // count
+            frames = []
+            for i in range(count):
+                pos = min(i * step + step // 2, total_frames - 1)
+                frames.append(pos)
             return frames
-        
-        indices = []
-        for i in range(target):
-            idx = int(i * (len(frames) - 1) / (target - 1))
-            indices.append(idx)
-        
-        return [frames[i] for i in indices]
