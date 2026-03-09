@@ -10,515 +10,172 @@
   <script src="https://cdn.jsdelivr.net/npm/element-plus/dist/index.full.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Noto Sans SC', sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      min-height: 100vh;
-      color: #e4e4e7;
-    }
-    
-    #app {
-      display: flex;
-      min-height: 100vh;
-    }
-    
-    .sidebar {
-      width: 220px;
-      background: rgba(255,255,255,0.03);
-      backdrop-filter: blur(20px);
-      border-right: 1px solid rgba(255,255,255,0.08);
-      padding: 24px 0;
-      position: fixed;
-      height: 100vh;
-      z-index: 100;
-    }
-    
-    .logo {
-      padding: 0 24px 32px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      margin-bottom: 24px;
-    }
-    
-    .logo h2 {
-      font-size: 18px;
-      font-weight: 600;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: 0.5px;
-    }
-    
-    .nav-item {
-      padding: 14px 24px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      transition: all 0.3s ease;
-      color: #a1a1aa;
-      font-size: 14px;
-      border-left: 3px solid transparent;
-    }
-    
-    .nav-item:hover {
-      background: rgba(255,255,255,0.04);
-      color: #e4e4e7;
-    }
-    
-    .nav-item.active {
-      background: linear-gradient(90deg, rgba(102,126,234,0.15) 0%, transparent 100%);
-      color: #fff;
-      border-left-color: #667eea;
-    }
-    
-    .nav-item .icon {
-      font-size: 18px;
-    }
-    
-    .main-content {
-      margin-left: 220px;
-      flex: 1;
-      padding: 32px;
-      background: radial-gradient(ellipse at top right, rgba(102,126,234,0.08) 0%, transparent 50%);
-    }
-    
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 32px;
-    }
-    
-    .page-title {
-      font-size: 28px;
-      font-weight: 600;
-      color: #fff;
-    }
-    
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 20px;
-      margin-bottom: 40px;
-    }
-    
-    .stat-card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 24px;
-      transition: all 0.3s ease;
-    }
-    
-    .stat-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(102,126,234,0.3);
-      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-    }
-    
-    .stat-value {
-      font-size: 36px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 8px;
-    }
-    
-    .stat-label {
-      font-size: 13px;
-      color: #71717a;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    
-    .content-card {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px;
-      padding: 28px;
-      margin-bottom: 24px;
-    }
-    
-    .card-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    
-    .card-title::before {
-      content: '';
-      width: 4px;
-      height: 20px;
-      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-      border-radius: 2px;
-    }
-    
-    .directory-item {
-      display: flex;
-      align-items: center;
-      padding: 16px 20px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
-      margin-bottom: 12px;
-      transition: all 0.3s ease;
-    }
-    
-    .directory-item:hover {
-      background: rgba(102,126,234,0.08);
-      border-color: rgba(102,126,234,0.2);
-    }
-    
-    .directory-item.selected {
-      background: rgba(102,126,234,0.12);
-      border-color: #667eea;
-    }
-    
-    .video-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 24px;
-    }
-    
-    .video-card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      overflow: hidden;
-      transition: all 0.3s ease;
-      cursor: pointer;
-    }
-    
-    .video-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-      border-color: rgba(102,126,234,0.3);
-    }
-    
-    .video-thumbnail {
-      width: 100%;
-      height: 180px;
-      object-fit: cover;
-      background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
-    }
-    
-    .video-info {
-      padding: 20px;
-    }
-    
-    .video-name {
-      font-size: 15px;
-      font-weight: 500;
-      color: #fff;
-      margin-bottom: 12px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    
-    .video-meta {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    
-    .status-badge {
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Noto Sans SC', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; color: #e4e4e7; }
+    #app { display: flex; min-height: 100vh; }
+    .sidebar { width: 220px; background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border-right: 1px solid rgba(255,255,255,0.08); padding: 24px 0; position: fixed; height: 100vh; z-index: 100; }
+    .logo { padding: 0 24px 32px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 24px; }
+    .logo h2 { font-size: 18px; font-weight: 600; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-item { padding: 14px 24px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: all 0.3s ease; color: #a1a1aa; font-size: 14px; border-left: 3px solid transparent; }
+    .nav-item:hover { background: rgba(255,255,255,0.04); color: #e4e4e7; }
+    .nav-item.active { background: linear-gradient(90deg, rgba(102,126,234,0.15) 0%, transparent 100%); color: #fff; border-left-color: #667eea; }
+    .main-content { margin-left: 220px; flex: 1; padding: 32px; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .page-title { font-size: 28px; font-weight: 600; color: #fff; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; transition: all 0.3s ease; }
+    .stat-card:hover { transform: translateY(-2px); border-color: rgba(102,126,234,0.3); }
+    .stat-value { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-label { font-size: 12px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    .content-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .card-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 16px; }
+    .action-btn { padding: 10px 20px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.3s ease; }
+    .action-btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+    .action-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
+    .action-btn.secondary { background: rgba(255,255,255,0.08); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.1); }
+    .action-btn.secondary:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .action-btn.danger { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+    .action-btn.danger:hover { background: rgba(239,68,68,0.3); }
+    .dir-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+    .dir-item { display: flex; align-items: center; padding: 12px 16px; background: rgba(255,255,255,0.02); border-radius: 10px; cursor: pointer; transition: all 0.2s; }
+    .dir-item:hover { background: rgba(102,126,234,0.1); }
+    .dir-item.selected { background: rgba(102,126,234,0.2); border: 1px solid #667eea; }
+    .dir-item .path { flex: 1; color: #fff; font-size: 14px; }
+    .dir-item .count { color: #71717a; font-size: 13px; }
+    .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .video-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; overflow: hidden; transition: all 0.3s; cursor: pointer; }
+    .video-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.3); }
+    .video-thumbnail { width: 100%; height: 160px; object-fit: cover; background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%); }
+    .video-info { padding: 16px; }
+    .video-name { font-size: 14px; font-weight: 500; color: #fff; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .video-meta { display: flex; justify-content: space-between; align-items: center; }
+    .video-duration { color: #71717a; font-size: 12px; }
+    .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
     .status-badge.pending { background: rgba(251,191,36,0.15); color: #fbbf24; }
     .status-badge.processing { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .status-badge.featured { background: rgba(168,85,247,0.15); color: #a855f7; }
+    .status-badge.clustered { background: rgba(236,72,153,0.15); color: #ec4899; }
+    .status-badge.tagged { background: rgba(6,182,212,0.15); color: #06b6d4; }
     .status-badge.ready { background: rgba(34,197,94,0.15); color: #22c55e; }
-    .status-badge.completed { background: rgba(168,85,247,0.15); color: #a855f7; }
+    .status-badge.completed { background: rgba(34,197,94,0.3); color: #4ade80; }
     .status-badge.failed { background: rgba(239,68,68,0.15); color: #ef4444; }
-    
-    .action-btn {
-      padding: 10px 20px;
-      border-radius: 10px;
-      border: none;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-    
-    .action-btn.primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-    }
-    
-    .action-btn.primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(102,126,234,0.4);
-    }
-    
-    .action-btn.secondary {
-      background: rgba(255,255,255,0.08);
-      color: #a1a1aa;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    
-    .action-btn.secondary:hover {
-      background: rgba(255,255,255,0.12);
-      color: #fff;
-    }
-    
-    .btn-group {
-      display: flex;
-      gap: 12px;
-      margin-top: 20px;
-    }
-    
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: #71717a;
-    }
-    
-    .empty-state .icon {
-      font-size: 64px;
-      margin-bottom: 20px;
-      opacity: 0.5;
-    }
-    
-    .task-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    
-    .task-table th,
-    .task-table td {
-      padding: 16px;
-      text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    
-    .task-table th {
-      color: #71717a;
-      font-weight: 500;
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .task-table td {
-      color: #e4e4e7;
-    }
-    
-    .task-table tr:hover td {
-      background: rgba(255,255,255,0.02);
-    }
-    
-    .worker-card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 24px;
-    }
-    
-    .worker-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-    
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #71717a;
-    }
-    
-    .status-dot.online {
-      background: #22c55e;
-      box-shadow: 0 0 12px rgba(34,197,94,0.5);
-    }
-    
-    .checkbox-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    :deep(.el-checkbox) {
-      --el-checkbox-checked-bg-color: #667eea;
-      --el-checkbox-checked-input-border-color: #667eea;
-    }
-    
-    :deep(.el-button--primary) {
-      --el-button-bg-color: #667eea;
-      --el-button-border-color: #667eea;
-    }
-    
-    :deep(.el-dialog) {
-      background: #1e1e2e;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 20px;
-    }
-    
-    :deep(.el-dialog__title) {
-      color: #fff;
-    }
-    
-    :deep(.el-input__wrapper) {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      box-shadow: none;
-    }
-    
-    :deep(.el-input__inner) {
-      color: #fff;
-    }
-    
-    .loading {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 60px;
-      color: #71717a;
-    }
-    
-    .fade-enter-active, .fade-leave-active {
-      transition: opacity 0.3s ease;
-    }
-    .fade-enter-from, .fade-leave-to {
-      opacity: 0;
-    }
+    .task-table { width: 100%; border-collapse: collapse; }
+    .task-table th, .task-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .task-table th { color: #71717a; font-weight: 500; font-size: 12px; text-transform: uppercase; }
+    .worker-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 20px; }
+    .worker-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #71717a; }
+    .status-dot.online { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.5); }
+    .empty-state { text-align: center; padding: 40px; color: #71717a; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+    :deep(.el-checkbox) { --el-checkbox-checked-bg-color: #667eea; }
+    :deep(.el-button--primary) { --el-button-bg-color: #667eea; --el-button-border-color: #667eea; }
+    :deep(.el-dialog) { background: #1e1e2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; }
+    :deep(.el-dialog__title) { color: #fff; }
+    :deep(.el-input__wrapper) { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); box-shadow: none; }
+    :deep(.el-input__inner) { color: #fff; }
+    :deep(.el-select__wrapper) { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); box-shadow: none; }
+    :deep(.el-select__placeholder) { color: #71717a !important; }
+    :deep(.el-select__selected-item) { color: #fff !important; }
+    .flex { display: flex; }
+    .flex-1 { flex: 1; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .ml-2 { margin-left: 8px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
   </style>
 </head>
 <body>
   <div id="app">
     <aside class="sidebar">
-      <div class="logo">
-        <h2>🎬 视频AI整理</h2>
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click="currentPage = 'dashboard'">
-        <span class="icon">📊</span> 仪表盘
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'videos' }" @click="currentPage = 'videos'">
-        <span class="icon">🎬</span> 视频管理
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'clusters' }" @click="currentPage = 'clusters'">
-        <span class="icon">👥</span> 聚类管理
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'review' }" @click="currentPage = 'review'">
-        <span class="icon">✅</span> 命名审核
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'tasks' }" @click="currentPage = 'tasks'">
-        <span class="icon">📋</span> 任务监控
-      </div>
-      <div class="nav-item" :class="{ active: currentPage === 'workers' }" @click="currentPage = 'workers'">
-        <span class="icon">💻</span> Worker状态
-      </div>
+      <div class="logo"><h2>🎬 视频AI整理</h2></div>
+      <div class="nav-item" :class="{ active: currentPage === 'dashboard' }" @click="currentPage = 'dashboard'">📊 仪表盘</div>
+      <div class="nav-item" :class="{ active: currentPage === 'videos' }" @click="currentPage = 'videos'">🎬 视频管理</div>
+      <div class="nav-item" :class="{ active: currentPage === 'review' }" @click="currentPage = 'review'">✅ 命名审核</div>
+      <div class="nav-item" :class="{ active: currentPage === 'tasks' }" @click="currentPage = 'tasks'">📋 任务监控</div>
+      <div class="nav-item" :class="{ active: currentPage === 'workers' }" @click="currentPage = 'workers'">💻 Worker</div>
     </aside>
     
     <main class="main-content">
+      <!-- 仪表盘 -->
       <template v-if="currentPage === 'dashboard'">
-        <div class="page-header">
-          <h1 class="page-title">仪表盘</h1>
+        <div class="page-header"><h1 class="page-title">仪表盘</h1></div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value">{{ stats.total }}</div><div class="stat-label">总视频</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">待处理</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.processing }}</div><div class="stat-label">处理中</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.ready }}</div><div class="stat-label">待采纳</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.completed }}</div><div class="stat-label">已完成</div></div>
+          <div class="stat-card"><div class="stat-value">{{ workers.length }}</div><div class="stat-label">在线Worker</div></div>
         </div>
         <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.total }}</div>
-            <div class="stat-label">总视频数</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.pending }}</div>
-            <div class="stat-label">待处理</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.processing }}</div>
-            <div class="stat-label">处理中</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.ready }}</div>
-            <div class="stat-label">待采纳</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.completed }}</div>
-            <div class="stat-label">已完成</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ workers.length }}</div>
-            <div class="stat-label">在线Worker</div>
-          </div>
+          <div class="stat-card"><div class="stat-value">{{ stats.pending_tasks }}</div><div class="stat-label">待处理任务</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.running_tasks }}</div><div class="stat-label">进行中任务</div></div>
         </div>
       </template>
       
+      <!-- 视频管理 -->
       <template v-if="currentPage === 'videos'">
         <div class="page-header">
           <h1 class="page-title">视频管理</h1>
-          <div class="btn-group">
+          <div class="flex gap-2">
             <button class="action-btn secondary" @click="loadDirectories">🔄 刷新目录</button>
-            <button class="action-btn primary" :disabled="selectedDirs.length === 0" @click="scanDirectories">
-              📁 扫描选中目录 ({{ selectedDirs.length }})
-            </button>
+            <button class="action-btn primary" :disabled="selectedDirs.length === 0" @click="scanDirectories">📁 扫描 ({{ selectedDirs.length }})</button>
           </div>
         </div>
         
+        <!-- 目录选择 -->
         <div class="content-card" v-if="directories.length > 0">
           <div class="card-title">选择视频目录</div>
-          <div 
-            v-for="dir in directories" 
-            :key="dir.path" 
-            class="directory-item"
-            :class="{ selected: selectedDirs.includes(dir.path) }"
-            @click="toggleDir(dir.path)"
-          >
-            <el-checkbox :model-value="selectedDirs.includes(dir.path)" @change="toggleDir(dir.path)"></el-checkbox>
-            <div style="flex: 1; margin-left: 12px;">
-              <div style="color: #fff; font-weight: 500;">{{ dir.path }}</div>
-              <div style="color: #71717a; font-size: 13px;">{{ dir.video_count }} 个视频</div>
+          <div class="dir-list">
+            <div v-for="dir in directories" :key="dir.path" class="dir-item" :class="{ selected: selectedDirs.includes(dir.path) }" @click="toggleDir(dir.path)">
+              <el-checkbox :model-value="selectedDirs.includes(dir.path)" @click.stop></el-checkbox>
+              <span class="path">{{ dir.path }}</span>
+              <span class="count">{{ dir.video_count }} 个视频</span>
             </div>
           </div>
         </div>
         
+        <!-- 视频操作栏 -->
         <div class="content-card">
-          <div class="card-title" style="display: flex; justify-content: space-between;">
-            <span>视频列表</span>
-            <div>
-              <el-select v-model="videoFilter" placeholder="筛选状态" style="width: 140px; margin-right: 12px;">
+          <div class="flex" style="justify-content: space-between; align-items: center;">
+            <div class="card-title" style="margin: 0;">视频列表</div>
+            <div class="flex gap-2">
+              <el-select v-model="videoFilter" placeholder="筛选状态" style="width: 130px;">
                 <el-option label="全部" value=""></el-option>
                 <el-option label="待处理" value="pending"></el-option>
                 <el-option label="处理中" value="processing"></el-option>
+                <el-option label="特征提取" value="featured"></el-option>
+                <el-option label="聚类" value="clustered"></el-option>
+                <el-option label="打标" value="tagged"></el-option>
                 <el-option label="待采纳" value="ready"></el-option>
                 <el-option label="已完成" value="completed"></el-option>
               </el-select>
-              <button class="action-btn secondary" @click="loadVideos">🔄 刷新</button>
-              <button class="action-btn primary" :disabled="selectedVideos.length === 0" @click="startProcess" style="margin-left: 12px;">
-                ▶ 开始处理 ({{ selectedVideos.length }})
-              </button>
+              <button class="action-btn secondary" @click="loadVideos">🔄</button>
+              <button class="action-btn primary" :disabled="selectedVideos.length === 0" @click="startProcess">▶ 处理 ({{ selectedVideos.length }})</button>
             </div>
           </div>
-          
-          <div v-if="loading" class="loading">加载中...</div>
-          <div v-else-if="videos.length === 0" class="empty-state">
-            <div class="icon">📂</div>
-            <div>暂无视频，请先扫描目录</div>
-          </div>
-          <div v-else class="video-grid">
-            <div v-for="video in videos" :key="video.id" class="video-card" @click="showVideoDetail(video)">
+        </div>
+        
+        <!-- 视频列表 -->
+        <div v-if="loading" class="empty-state">加载中...</div>
+        <div v-else-if="videos.length === 0" class="empty-state">
+          <div class="icon">📂</div>
+          <div>暂无视频，请先扫描目录</div>
+        </div>
+        <div v-else class="video-grid">
+          <div v-for="video in videos" :key="video.id" class="video-card">
+            <div @click="showVideoDetail(video)">
               <img v-if="video.thumbnail_url" :src="video.thumbnail_url" class="video-thumbnail">
-              <div v-else class="video-thumbnail" style="display: flex; align-items: center; justify-content: center; font-size: 48px; color: #3f3f46;">🎬</div>
+              <div v-else class="video-thumbnail" style="display:flex;align-items:center;justify-content:center;font-size:40px;color:#3f3f46;">🎬</div>
               <div class="video-info">
                 <div class="video-name">{{ video.filename }}</div>
                 <div class="video-meta">
+                  <span class="video-duration">{{ video.duration ? (video.duration/60).toFixed(1)+'分钟' : '-' }}</span>
                   <el-checkbox :model-value="selectedVideos.includes(video.id)" @click.stop @change="toggleVideo(video.id)"></el-checkbox>
+                </div>
+                <div class="video-meta mt-2">
                   <span class="status-badge" :class="video.status">{{ getStatusText(video.status) }}</span>
                 </div>
               </div>
@@ -527,40 +184,11 @@
         </div>
       </template>
       
-      <template v-if="currentPage === 'clusters'">
-        <div class="page-header">
-          <h1 class="page-title">聚类管理</h1>
-          <button class="action-btn secondary" @click="loadClusters">🔄 刷新</button>
-        </div>
-        <div class="content-card">
-          <div class="card-title">演员聚类</div>
-          <div v-if="clusters.length === 0" class="empty-state">
-            <div class="icon">👥</div>
-            <div>暂无聚类数据</div>
-          </div>
-          <div v-else class="video-grid">
-            <div v-for="cluster in clusters" :key="cluster.id" class="video-card">
-              <div class="video-thumbnail" style="display: flex; align-items: center; justify-content: center; font-size: 48px;">👤</div>
-              <div class="video-info">
-                <div class="video-name">聚类 #{{ cluster.id }}</div>
-                <div style="color: #71717a; font-size: 13px; margin-bottom: 12px;">{{ cluster.face_count }} 个人脸</div>
-                <el-input v-model="clusterNames[cluster.id]" placeholder="输入演员姓名"></el-input>
-                <button class="action-btn primary" style="width: 100%; margin-top: 12px;" @click="nameCluster(cluster.id)">保存命名</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-      
+      <!-- 命名审核 -->
       <template v-if="currentPage === 'review'">
         <div class="page-header">
           <h1 class="page-title">命名审核</h1>
-          <div class="btn-group">
-            <button class="action-btn secondary" @click="loadReviewVideos">🔄 刷新</button>
-            <button class="action-btn primary" :disabled="selectedReviewVideos.length === 0" @click="adoptSelected">
-              ✅ 批量采纳 ({{ selectedReviewVideos.length }})
-            </button>
-          </div>
+          <button class="action-btn secondary" @click="loadReviewVideos">🔄 刷新</button>
         </div>
         <div class="content-card">
           <div v-if="reviewVideos.length === 0" class="empty-state">
@@ -570,15 +198,12 @@
           <div v-else class="video-grid">
             <div v-for="video in reviewVideos" :key="video.id" class="video-card">
               <img v-if="video.thumbnail_url" :src="video.thumbnail_url" class="video-thumbnail">
-              <div v-else class="video-thumbnail" style="display: flex; align-items: center; justify-content: center; font-size: 48px;">🎬</div>
+              <div v-else class="video-thumbnail" style="display:flex;align-items:center;justify-content:center;font-size:40px;">🎬</div>
               <div class="video-info">
                 <div class="video-name">{{ video.filename }}</div>
-                <div style="margin: 12px 0;">
-                  <el-checkbox v-model="selectedReviewVideos" :label="video.id">选择</el-checkbox>
-                </div>
-                <el-input v-model="reviewNames[video.id]" placeholder="推荐命名"></el-input>
-                <div class="btn-group" style="margin-top: 12px; margin-bottom: 0;">
-                  <button class="action-btn primary" style="flex: 1;" @click="adoptVideo(video.id)">采纳</button>
+                <div class="mt-2"><el-input v-model="reviewNames[video.id]" placeholder="推荐命名"></el-input></div>
+                <div class="flex gap-2 mt-2">
+                  <button class="action-btn primary flex-1" @click="adoptVideo(video.id)">采纳</button>
                 </div>
               </div>
             </div>
@@ -586,6 +211,7 @@
         </div>
       </template>
       
+      <!-- 任务监控 -->
       <template v-if="currentPage === 'tasks'">
         <div class="page-header">
           <h1 class="page-title">任务监控</h1>
@@ -593,16 +219,7 @@
         </div>
         <div class="content-card">
           <table class="task-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>类型</th>
-                <th>状态</th>
-                <th>视频ID</th>
-                <th>创建时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
+            <thead><tr><th>ID</th><th>类型</th><th>状态</th><th>视频</th><th>创建时间</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="task in tasks" :key="task.id">
                 <td>{{ task.id }}</td>
@@ -610,15 +227,14 @@
                 <td><span class="status-badge" :class="task.status">{{ getTaskStatusText(task.status) }}</span></td>
                 <td>{{ task.video_id || '-' }}</td>
                 <td>{{ new Date(task.created_at).toLocaleString() }}</td>
-                <td>
-                  <button v-if="task.status === 'failed'" class="action-btn secondary" @click="retryTask(task.id)">重试</button>
-                </td>
+                <td><button v-if="task.status==='failed'" class="action-btn secondary" @click="retryTask(task.id)">重试</button></td>
               </tr>
             </tbody>
           </table>
         </div>
       </template>
       
+      <!-- Worker -->
       <template v-if="currentPage === 'workers'">
         <div class="page-header">
           <h1 class="page-title">Worker状态</h1>
@@ -629,32 +245,34 @@
             <div class="worker-header">
               <span class="status-dot" :class="{ online: worker.is_online }"></span>
               <strong>{{ worker.id }}</strong>
-              <span style="color: #71717a;">{{ worker.is_online ? '在线' : '离线' }}</span>
+              <span style="color:#71717a">{{ worker.is_online?'在线':'离线' }}</span>
             </div>
-            <div style="color: #71717a; font-size: 14px;">
+            <div style="color:#71717a;font-size:13px;">
               <div>状态: {{ worker.status }}</div>
-              <div>最后心跳: {{ new Date(worker.last_heartbeat).toLocaleString() }}</div>
+              <div>心跳: {{ new Date(worker.last_heartbeat).toLocaleString() }}</div>
             </div>
           </div>
         </div>
       </template>
     </main>
     
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px">
+    <!-- 视频详情弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="650px">
       <div v-if="currentVideo">
-        <p style="margin-bottom: 12px;"><strong>文件名:</strong> {{ currentVideo.filename }}</p>
-        <p style="margin-bottom: 12px;"><strong>时长:</strong> {{ currentVideo.duration ? (currentVideo.duration / 60).toFixed(1) + ' 分钟' : '未知' }}</p>
-        <p style="margin-bottom: 12px;"><strong>状态:</strong> <span class="status-badge" :class="currentVideo.status">{{ getStatusText(currentVideo.status) }}</span></p>
-        <p style="margin-bottom: 12px;"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</p>
-        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-          <strong>抽帧图片 ({{ currentVideo.frames?.length || 0 }})</strong>
-          <button class="action-btn secondary" @click="reExtractFrames" style="padding: 6px 14px; font-size: 12px;">🔄 重新抽帧</button>
+        <p><strong>时长:</strong> {{ currentVideo.duration ? (currentVideo.duration/60).toFixed(1)+' 分钟' : '未知' }}</p>
+        <p class="mt-2"><strong>状态:</strong> <span class="status-badge" :class="currentVideo.status">{{ getStatusText(currentVideo.status) }}</span></p>
+        <p class="mt-2"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</p>
+        
+        <div class="flex mt-3" style="justify-content:space-between;align-items:center;">
+          <strong>抽帧 ({{ currentVideo.frames?.length || 0 }})</strong>
+          <button class="action-btn danger" @click="reExtractFrames" style="padding:6px 12px;font-size:12px;">🔄 重新抽帧</button>
         </div>
-        <div class="video-grid" style="margin-top: 12px;">
-          <div v-for="frame in currentVideo.frames" :key="frame.id" class="video-card">
+        
+        <div class="video-grid mt-2">
+          <div v-for="frame in currentVideo.frames" :key="frame.id" class="video-card" style="cursor:default;">
             <img :src="`/api/frames/${frame.id}/image`" class="video-thumbnail">
-            <div class="video-info">
-              <div style="font-size: 12px; color: #71717a;">{{ frame.timestamp?.toFixed(1) }}s</div>
+            <div class="video-info" style="padding:8px;">
+              <div style="font-size:11px;color:#71717a;">{{ frame.timestamp?.toFixed(1) }}s</div>
             </div>
           </div>
         </div>
@@ -671,7 +289,7 @@
         const currentPage = ref('dashboard');
         const loading = ref(false);
         
-        const stats = reactive({ total: 0, pending: 0, processing: 0, ready: 0, completed: 0 });
+        const stats = reactive({ total: 0, pending: 0, processing: 0, ready: 0, completed: 0, pending_tasks: 0, running_tasks: 0 });
         const videos = ref([]);
         const directories = ref([]);
         const selectedDirs = ref([]);
@@ -679,10 +297,7 @@
         const videoFilter = ref('');
         const tasks = ref([]);
         const workers = ref([]);
-        const clusters = ref([]);
         const reviewVideos = ref([]);
-        const selectedReviewVideos = ref([]);
-        const clusterNames = reactive({});
         const reviewNames = reactive({});
         
         const dialogVisible = ref(false);
@@ -712,13 +327,11 @@
         };
         
         const scanDirectories = async () => {
-          if (selectedDirs.value.length === 0) {
-            ElMessage.warning('请先选择要扫描的目录');
-            return;
-          }
+          if (selectedDirs.value.length === 0) { ElMessage.warning('请先选择目录'); return; }
           try {
-            const res = await api.post('/api/videos/scan', { directories: selectedDirs.value });
+            await api.post('/api/videos/scan', { directories: selectedDirs.value });
             ElMessage.success('扫描完成');
+            selectedDirs.value = [];
             loadVideos();
             loadDashboard();
           } catch (e) { ElMessage.error('扫描失败'); }
@@ -762,34 +375,14 @@
         };
         
         const startProcess = async () => {
-          if (selectedVideos.value.length === 0) {
-            ElMessage.warning('请先选择视频');
-            return;
-          }
+          if (selectedVideos.value.length === 0) { ElMessage.warning('请先选择视频'); return; }
           try {
             await api.post('/api/videos/start-process', { video_ids: selectedVideos.value });
-            ElMessage.success('任务已创建');
+            ElMessage.success('已创建处理任务');
             selectedVideos.value = [];
             loadVideos();
             loadDashboard();
           } catch (e) { ElMessage.error('操作失败'); }
-        };
-        
-        const loadClusters = async () => {
-          try {
-            const res = await api.get('/api/clusters');
-            clusters.value = res.data;
-          } catch (e) { console.error(e); }
-        };
-        
-        const nameCluster = async (id) => {
-          const name = clusterNames[id];
-          if (!name) { ElMessage.warning('请输入演员姓名'); return; }
-          try {
-            await api.post('/api/clusters/name', { cluster_id: id, actor_name: name });
-            ElMessage.success('命名成功');
-            loadClusters();
-          } catch (e) { ElMessage.error('命名失败'); }
         };
         
         const loadReviewVideos = async () => {
@@ -809,53 +402,35 @@
           } catch (e) { ElMessage.error('采纳失败'); }
         };
         
-        const adoptSelected = async () => {
-          if (selectedReviewVideos.value.length === 0) { ElMessage.warning('请选择视频'); return; }
-          const customNames = {};
-          selectedReviewVideos.value.forEach(id => { if (reviewNames[id]) customNames[id] = reviewNames[id]; });
-          try {
-            await api.post('/api/videos/adopt', { video_ids: selectedReviewVideos.value, custom_names: Object.keys(customNames).length > 0 ? customNames : null });
-            ElMessage.success('批量采纳成功');
-            selectedReviewVideos.value = [];
-            loadReviewVideos();
-            loadDashboard();
-          } catch (e) { ElMessage.error('采纳失败'); }
-        };
-        
         const loadTasks = async () => {
-          try {
-            const res = await api.get('/api/tasks');
-            tasks.value = res.data;
-          } catch (e) { console.error(e); }
+          try { const res = await api.get('/api/tasks'); tasks.value = res.data; } catch (e) { console.error(e); }
         };
         
         const retryTask = async (id) => {
-          try {
-            await api.post(`/api/tasks/${id}/retry`);
-            ElMessage.success('已重试');
-            loadTasks();
-          } catch (e) { ElMessage.error('重试失败'); }
+          try { await api.post(`/api/tasks/${id}/retry`); ElMessage.success('已重试'); loadTasks(); } catch (e) { ElMessage.error('重试失败'); }
         };
         
         const loadWorkers = async () => {
-          try {
-            const res = await api.get('/api/workers');
-            workers.value = res.data;
-          } catch (e) { console.error(e); }
+          try { const res = await api.get('/api/workers'); workers.value = res.data; } catch (e) { console.error(e); }
         };
         
-        const getStatusText = (s) => ({ pending: '待处理', processing: '处理中', ready: '待采纳', completed: '已完成', failed: '失败' }[s] || s);
-        const getTaskTypeText = (t) => ({ feature: '特征提取', cluster: '聚类', tag: '打标' }[t] || t);
-        const getTaskStatusText = (s) => ({ pending: '待分配', assigned: '已分配', running: '运行中', completed: '已完成', failed: '失败' }[s] || s);
+        const getStatusText = (s) => ({ 
+          pending:'待处理', 
+          processing:'抽帧中', 
+          featured:'特征提取中', 
+          clustered:'聚类中', 
+          tagged:'打标中', 
+          ready:'待采纳', 
+          completed:'已完成', 
+          failed:'失败' 
+        }[s] || s);
+        const getTaskTypeText = (t) => ({ feature:'特征提取', cluster:'聚类', tag:'打标' }[t] || t);
+        const getTaskStatusText = (s) => ({ pending:'待分配', assigned:'已分配', running:'运行中', completed:'完成', failed:'失败' }[s] || s);
         
-        onMounted(() => {
-          loadDashboard();
-          setInterval(loadDashboard, 30000);
-        });
+        onMounted(() => { loadDashboard(); setInterval(loadDashboard, 30000); });
         
         watch(currentPage, (p) => {
           if (p === 'videos') { loadDirectories(); loadVideos(); }
-          if (p === 'clusters') loadClusters();
           if (p === 'review') loadReviewVideos();
           if (p === 'tasks') loadTasks();
           if (p === 'workers') loadWorkers();
@@ -863,15 +438,7 @@
         
         watch(videoFilter, loadVideos);
         
-        return {
-          currentPage, loading, stats, videos, directories, selectedDirs, selectedVideos,
-          videoFilter, tasks, workers, clusters, reviewVideos, selectedReviewVideos,
-          clusterNames, reviewNames, dialogVisible, dialogTitle, currentVideo,
-          loadDashboard, loadDirectories, toggleDir, scanDirectories, loadVideos,
-          toggleVideo, showVideoDetail, reExtractFrames, startProcess, loadClusters, nameCluster,
-          loadReviewVideos, adoptVideo, adoptSelected, loadTasks, retryTask, loadWorkers,
-          getStatusText, getTaskTypeText, getTaskStatusText
-        };
+        return { currentPage, loading, stats, videos, directories, selectedDirs, selectedVideos, videoFilter, tasks, workers, reviewVideos, reviewNames, dialogVisible, dialogTitle, currentVideo, loadDashboard, loadDirectories, toggleDir, scanDirectories, loadVideos, toggleVideo, showVideoDetail, reExtractFrames, startProcess, loadReviewVideos, adoptVideo, loadTasks, retryTask, loadWorkers, getStatusText, getTaskTypeText, getTaskStatusText };
       }
     });
     
