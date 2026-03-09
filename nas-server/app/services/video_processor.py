@@ -86,12 +86,17 @@ class FrameExtractor:
         """使用 ffprobe 获取视频信息"""
         try:
             cmd = [
-                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-select_streams', 'v:0',
                 '-show_entries', 'stream=r_frame_rate,duration,nb_frames',
                 '-show_entries', 'format=duration',
                 '-of', 'json', filepath
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if not result.stdout:
+                return 0.0, 0.0, 0
+            
             data = json.loads(result.stdout)
             
             # 获取时长
@@ -108,7 +113,6 @@ class FrameExtractor:
             if 'streams' in data and len(data['streams']) > 0:
                 stream = data['streams'][0]
                 if 'r_frame_rate' in stream:
-                    # 帧率可能是 "30000/1001" 这样的格式
                     rate = stream['r_frame_rate']
                     if '/' in rate:
                         num, den = rate.split('/')
@@ -123,7 +127,7 @@ class FrameExtractor:
                 if 'nb_frames' in stream:
                     total_frames = int(stream['nb_frames'])
             
-            # 如果总帧数为0，用时长和帧率计算
+            # 如果总帧数为 0，用时长和帧率计算
             if total_frames == 0 and duration > 0 and fps > 0:
                 total_frames = int(duration * fps)
             
