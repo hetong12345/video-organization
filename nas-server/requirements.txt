@@ -11,7 +11,6 @@ aiofiles==23.2.1
 apscheduler==3.10.4
 opencv-python-headless==4.9.0.80
 ffmpeg-python==0.2.0
-insightface==0.7.3
-onnxruntime==1.16.3
 numpy==1.26.3
 pillow==10.2.0
+httpx==0.26.0

@@ -25,9 +25,6 @@ services:
         condition: service_healthy
     networks:
       - video-org-network
-    stdin_open: true
-    tty: true
-    command: ["/bin/bash"]
 
   db:
     image: pgvector/pgvector:pg16
@@ -39,7 +36,6 @@ services:
       - POSTGRES_DB=video_org
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ports:
       - "5432:5432"
     healthcheck:
