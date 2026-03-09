@@ -174,3 +174,37 @@ def list_video_directories():
                 pass
     
     return {"directories": dirs}
+
+
+@router.get("/system-directories")
+def list_system_directories(base_path: str = "/media"):
+    """列出系统目录结构，用于选择扫描目录"""
+    result = []
+    
+    if not os.path.exists(base_path):
+        return {"directories": result}
+    
+    try:
+        for item in os.listdir(base_path):
+            full_path = os.path.join(base_path, item)
+            if os.path.isdir(full_path):
+                try:
+                    video_count = sum(1 for f in os.listdir(full_path) 
+                                    if os.path.splitext(f)[1].lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'})
+                    result.append({
+                        "path": full_path,
+                        "name": item,
+                        "video_count": video_count,
+                        "has_subdirs": any(os.path.isdir(os.path.join(full_path, s)) for s in os.listdir(full_path))
+                    })
+                except:
+                    result.append({
+                        "path": full_path,
+                        "name": item,
+                        "video_count": 0,
+                        "has_subdirs": False
+                    })
+    except Exception as e:
+        print(f"Error listing directories: {e}")
+    
+    return {"directories": sorted(result, key=lambda x: x['name'])}

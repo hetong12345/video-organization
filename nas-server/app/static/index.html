@@ -120,24 +120,47 @@
           <h1 class="page-title">视频管理</h1>
           <div class="flex gap-2">
             <button class="action-btn secondary" @click="refreshAll">🔄 刷新</button>
-            <button class="action-btn primary" :disabled="selectedDirs.length === 0" @click="scanDirs">📁 扫描选中 ({{ selectedDirs.length }})</button>
+            <button class="action-btn primary" @click="showDirSelector = true">📁 选择目录</button>
+            <button class="action-btn primary" :disabled="selectedDirs.length === 0" @click="scanDirs">▶ 扫描选中 ({{ selectedDirs.length }})</button>
           </div>
         </div>
         
-        <!-- 目录列表 -->
-        <div class="content-card">
+        <!-- 目录选择器弹窗 -->
+        <el-dialog v-model="showDirSelector" title="选择扫描目录" width="600px">
+          <div class="content-card" style="margin:0;max-height:400px;overflow-y:auto">
+            <div class="card-header">
+              <span class="card-title">📂 系统目录</span>
+              <span style="color:#71717a;font-size:13px">点击选择要扫描的目录</span>
+            </div>
+            <div v-if="systemDirs.length === 0" class="empty-state" style="padding:20px">
+              <div>加载中...</div>
+            </div>
+            <div v-else class="dir-list">
+              <div v-for="d in systemDirs" :key="d.path" class="dir-item" :class="{ selected: selectedDirs.includes(d.path) }" @click="toggleDir(d.path)">
+                <el-checkbox :model-value="selectedDirs.includes(d.path)" @click.stop></el-checkbox>
+                <div style="flex:1;margin-left:12px">
+                  <div style="color:#fff;font-weight:500">{{ d.name }}</div>
+                  <div style="color:#71717a;font-size:12px">{{ d.path }}</div>
+                </div>
+                <div style="color:#71717a;font-size:13px">{{ d.video_count }} 个视频</div>
+              </div>
+            </div>
+          </div>
+          <template #footer>
+            <button class="action-btn secondary" @click="showDirSelector = false">取消</button>
+            <button class="action-btn primary" @click="confirmDirSelection">确定</button>
+          </template>
+        </el-dialog>
+        
+        <!-- 已选择的目录 -->
+        <div class="content-card" v-if="selectedDirs.length > 0">
           <div class="card-header">
-            <span class="card-title">📁 视频目录</span>
-            <span style="color:#71717a;font-size:13px">点击选择要扫描的目录</span>
+            <span class="card-title">📁 已选择目录 ({{ selectedDirs.length }})</span>
+            <button class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="selectedDirs = []">清空</button>
           </div>
-          <div v-if="dirs.length === 0" class="empty-state" style="padding:20px">
-            <div>暂无目录，请在 /media 下创建文件夹并放入视频</div>
-          </div>
-          <div v-else class="dir-list">
-            <div v-for="d in dirs" :key="d.path" class="dir-item" :class="{ selected: selectedDirs.includes(d.path) }" @click="toggleDir(d.path)">
-              <el-checkbox :model-value="selectedDirs.includes(d.path)" @click.stop></el-checkbox>
-              <span class="path">{{ d.path }}</span>
-              <span class="count">{{ d.video_count }} 个视频</span>
+          <div class="dir-list">
+            <div v-for="path in selectedDirs" :key="path" class="dir-item">
+              <span style="color:#fff">{{ path }}</span>
             </div>
           </div>
         </div>
@@ -293,6 +316,7 @@
         const page = ref('dashboard');
         const loading = ref(false);
         const showDialog = ref(false);
+        const showDirSelector = ref(false);
         const reExtracting = ref(false);
         
         // 数据
@@ -301,6 +325,7 @@
           ready_videos: 0, completed_videos: 0,
           pending_tasks: 0, running_tasks: 0, online_workers: 0
         });
+        const systemDirs = ref([]);
         const dirs = ref([]);
         const videos = ref([]);
         const tasks = ref([]);
@@ -338,6 +363,17 @@
             const res = await api.get('/api/videos/directories');
             dirs.value = res.data.directories || [];
           } catch (e) { console.error('loadDirs error:', e); }
+        };
+        
+        const loadSystemDirs = async () => {
+          try {
+            const res = await api.get('/api/videos/system-directories?base_path=/media');
+            systemDirs.value = res.data.directories || [];
+          } catch (e) { console.error('loadSystemDirs error:', e); }
+        };
+        
+        const confirmDirSelection = () => {
+          showDirSelector.value = false;
         };
         
         const loadVideos = async () => {
@@ -459,7 +495,7 @@
         // 页面切换加载
         watch(page, (p) => {
           if (p === 'dashboard') loadStats();
-          if (p === 'videos') { loadDirs(); loadVideos(); }
+          if (p === 'videos') { loadSystemDirs(); loadDirs(); loadVideos(); }
           if (p === 'review') loadReview();
           if (p === 'tasks') loadTasks();
           if (p === 'workers') loadWorkers();
@@ -473,9 +509,9 @@
         });
         
         return {
-          page, loading, showDialog, reExtracting, stats, dirs, videos, tasks, workers,
+          page, loading, showDialog, showDirSelector, reExtracting, stats, systemDirs, dirs, videos, tasks, workers,
           reviewList, frames, currentVideo, selectedDirs, selectedVideos, filter, reviewNames,
-          statusText, taskTypeText, taskStatusText, formatTime, refreshAll, toggleDir, scanDirs,
+          statusText, taskTypeText, taskStatusText, formatTime, refreshAll, loadSystemDirs, toggleDir, confirmDirSelection, scanDirs,
           toggleVideo, startProcess, openVideo, reExtract, loadReview, adopt, loadTasks, retryTask, loadWorkers
         };
       }
