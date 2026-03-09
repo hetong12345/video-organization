@@ -1,0 +1,55 @@
+services:
+  app:
+    build: .
+    container_name: video-org-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/video_org
+      - RAW_VIDEO_DIR=/media/raw
+      - PROCESSED_VIDEO_DIR=/media/processed
+      - CACHE_DIR=/cache
+      - FRAME_CACHE_DIR=/cache/frames
+      - MIN_FACE_RATIO=0.1
+      - MAX_RETRY_COUNT=3
+      - WORKER_TIMEOUT=300
+      - FEATURE_BATCH_SIZE=100
+      - CLUSTER_MIN_SAMPLES=5
+    volumes:
+      - ./media/raw:/media/raw
+      - ./media/processed:/media/processed
+      - ./cache:/cache
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - video-org-network
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: video-org-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=video_org
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - video-org-network
+
+volumes:
+  postgres_data:
+
+networks:
+  video-org-network:
+    driver: bridge

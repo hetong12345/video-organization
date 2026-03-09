@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频AI整理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h2>视频整理系统</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <span class="icon">📊</span>
+                    <span>仪表盘</span>
+                </li>
+                <li class="nav-item" data-page="videos">
+                    <span class="icon">🎬</span>
+                    <span>视频列表</span>
+                </li>
+                <li class="nav-item" data-page="clusters">
+                    <span class="icon">👥</span>
+                    <span>聚类管理</span>
+                </li>
+                <li class="nav-item" data-page="review">
+                    <span class="icon">✅</span>
+                    <span>命名审核</span>
+                </li>
+                <li class="nav-item" data-page="tasks">
+                    <span class="icon">📋</span>
+                    <span>任务监控</span>
+                </li>
+                <li class="nav-item" data-page="workers">
+                    <span class="icon">💻</span>
+                    <span>Worker状态</span>
+                </li>
+            </ul>
+        </nav>
+        
+        <main class="main-content">
+            <div id="page-dashboard" class="page active">
+                <h1>仪表盘</h1>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-total-videos">0</div>
+                        <div class="stat-label">总视频数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-pending-videos">0</div>
+                        <div class="stat-label">待处理</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-processing-videos">0</div>
+                        <div class="stat-label">处理中</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-ready-videos">0</div>
+                        <div class="stat-label">待采纳</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-completed-videos">0</div>
+                        <div class="stat-label">已完成</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-online-workers">0</div>
+                        <div class="stat-label">在线Worker</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h2>任务队列</h2>
+                    <div class="task-stats">
+                        <span>待分配: <strong id="stat-pending-tasks">0</strong></span>
+                        <span>运行中: <strong id="stat-running-tasks">0</strong></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="page-videos" class="page">
+                <h1>视频列表</h1>
+                <div class="filters">
+                    <select id="video-status-filter">
+                        <option value="">全部状态</option>
+                        <option value="pending">待处理</option>
+                        <option value="processing">处理中</option>
+                        <option value="featured">已提取特征</option>
+                        <option value="clustered">已聚类</option>
+                        <option value="tagged">已打标</option>
+                        <option value="ready">待采纳</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                    </select>
+                    <button onclick="loadVideos()">刷新</button>
+                </div>
+                <div id="video-list" class="video-grid"></div>
+            </div>
+            
+            <div id="page-clusters" class="page">
+                <h1>聚类管理</h1>
+                <p class="hint">为每个聚类命名演员姓名，系统将自动关联到相关视频</p>
+                <div id="cluster-list" class="cluster-grid"></div>
+            </div>
+            
+            <div id="page-review" class="page">
+                <h1>命名审核</h1>
+                <div class="review-actions">
+                    <button onclick="adoptSelected()" class="btn-primary">批量采纳</button>
+                    <button onclick="loadReviewVideos()">刷新</button>
+                </div>
+                <div id="review-list" class="review-grid"></div>
+            </div>
+            
+            <div id="page-tasks" class="page">
+                <h1>任务监控</h1>
+                <div class="filters">
+                    <select id="task-type-filter">
+                        <option value="">全部类型</option>
+                        <option value="feature">特征提取</option>
+                        <option value="cluster">聚类</option>
+                        <option value="tag">打标</option>
+                    </select>
+                    <select id="task-status-filter">
+                        <option value="">全部状态</option>
+                        <option value="pending">待分配</option>
+                        <option value="assigned">已分配</option>
+                        <option value="running">运行中</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                    </select>
+                    <button onclick="loadTasks()">刷新</button>
+                </div>
+                <div id="task-list" class="task-table-container">
+                    <table class="task-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>Worker</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="task-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="page-workers" class="page">
+                <h1>Worker状态</h1>
+                <button onclick="loadWorkers()">刷新</button>
+                <div id="worker-list" class="worker-grid"></div>
+            </div>
+        </main>
+    </div>
+    
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
