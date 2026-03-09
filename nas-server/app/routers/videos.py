@@ -47,112 +47,6 @@ def list_videos(
     return result
 
 
-@router.get("/{video_id}", response_model=VideoResponse)
-def get_video(video_id: int, db: Session = Depends(get_db)):
-    video = db.query(Video).filter(Video.id == video_id).first()
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-    return video
-
-
-@router.post("", response_model=VideoResponse)
-def create_video(video: VideoCreate, db: Session = Depends(get_db)):
-    db_video = Video(**video.model_dump())
-    db.add(db_video)
-    db.commit()
-    db.refresh(db_video)
-    return db_video
-
-
-@router.get("/{video_id}/frames", response_model=List[FrameResponse])
-def get_video_frames(video_id: int, db: Session = Depends(get_db)):
-    frames = db.query(Frame).filter(Frame.video_id == video_id).all()
-    return frames
-
-
-@router.post("/scan")
-def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(get_db)):
-    from app.services.video_processor import VideoScanner
-    
-    if directories is None:
-        directories = [settings.RAW_VIDEO_DIR]
-    
-    results = []
-    for directory in directories:
-        if not os.path.exists(directory):
-            results.append({"directory": directory, "error": "Directory not found", "videos": 0})
-            continue
-        
-        scanner = VideoScanner(directory)
-        new_videos = scanner.scan_directory()
-        
-        results.append({"directory": directory, "videos": len(new_videos)})
-    
-    return {"results": results}
-
-
-@router.post("/start-process")
-def start_process(video_ids: List[int], force: bool = False, db: Session = Depends(get_db)):
-    from app.services.video_processor import FrameExtractor
-    
-    extractor = FrameExtractor()
-    results = []
-    
-    for video_id in video_ids:
-        video = db.query(Video).filter(Video.id == video_id).first()
-        if not video:
-            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
-            continue
-        
-        if video.status not in [VideoStatus.PENDING, VideoStatus.READY]:
-            if not force:
-                results.append({"video_id": video_id, "success": False, "error": f"Video status is {video.status}"})
-                continue
-        
-        extractor.extract_frames(video_id, force=force)
-        results.append({"video_id": video_id, "success": True})
-    
-    return {"results": results}
-
-
-@router.post("/{video_id}/re-extract")
-def re_extract_frames(video_id: int, db: Session = Depends(get_db)):
-    from app.services.video_processor import FrameExtractor
-    
-    extractor = FrameExtractor()
-    video = db.query(Video).filter(Video.id == video_id).first()
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-    
-    frames = extractor.extract_frames(video_id, force=True)
-    
-    return {"success": True, "frames_extracted": len(frames)}
-
-
-@router.post("/adopt")
-def adopt_videos(
-    video_ids: List[int],
-    custom_names: Optional[dict] = None,
-    db: Session = Depends(get_db)
-):
-    results = []
-    
-    for video_id in video_ids:
-        video = db.query(Video).filter(Video.id == video_id).first()
-        if not video:
-            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
-            continue
-        
-        if custom_names and video_id in custom_names:
-            video.recommended_name = custom_names[video_id]
-        
-        video.status = VideoStatus.COMPLETED
-        db.commit()
-        results.append({"video_id": video_id, "success": True})
-    
-    return {"results": results}
-
-
 @router.get("/directories")
 def list_video_directories():
     dirs = []
@@ -208,3 +102,100 @@ def list_system_directories(base_path: str = "/media"):
         print(f"Error listing directories: {e}")
     
     return {"directories": sorted(result, key=lambda x: x['name'])}
+
+
+@router.post("/scan")
+def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(get_db)):
+    from app.services.video_processor import VideoScanner
+    
+    if directories is None:
+        directories = [settings.RAW_VIDEO_DIR]
+    
+    results = []
+    for directory in directories:
+        if not os.path.exists(directory):
+            results.append({"directory": directory, "error": "Directory not found", "videos": 0})
+            continue
+        
+        scanner = VideoScanner(directory)
+        new_videos = scanner.scan_directory()
+        
+        results.append({"directory": directory, "videos": len(new_videos)})
+    
+    return {"results": results}
+
+
+@router.post("/start-process")
+def start_process(video_ids: List[int], force: bool = False, db: Session = Depends(get_db)):
+    from app.services.video_processor import FrameExtractor
+    
+    extractor = FrameExtractor()
+    results = []
+    
+    for video_id in video_ids:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
+            continue
+        
+        if video.status not in [VideoStatus.PENDING, VideoStatus.READY]:
+            if not force:
+                results.append({"video_id": video_id, "success": False, "error": f"Video status is {video.status}"})
+                continue
+        
+        extractor.extract_frames(video_id, force=force)
+        results.append({"video_id": video_id, "success": True})
+    
+    return {"results": results}
+
+
+@router.post("/adopt")
+def adopt_videos(
+    video_ids: List[int],
+    custom_names: Optional[dict] = None,
+    db: Session = Depends(get_db)
+):
+    results = []
+    
+    for video_id in video_ids:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            results.append({"video_id": video_id, "success": False, "error": "Video not found"})
+            continue
+        
+        if custom_names and video_id in custom_names:
+            video.recommended_name = custom_names[video_id]
+        
+        video.status = VideoStatus.COMPLETED
+        db.commit()
+        results.append({"video_id": video_id, "success": True})
+    
+    return {"results": results}
+
+
+@router.get("/{video_id}", response_model=VideoResponse)
+def get_video(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return video
+
+
+@router.get("/{video_id}/frames", response_model=List[FrameResponse])
+def get_video_frames(video_id: int, db: Session = Depends(get_db)):
+    frames = db.query(Frame).filter(Frame.video_id == video_id).all()
+    return frames
+
+
+@router.post("/{video_id}/re-extract")
+def re_extract_frames(video_id: int, db: Session = Depends(get_db)):
+    from app.services.video_processor import FrameExtractor
+    
+    extractor = FrameExtractor()
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    frames = extractor.extract_frames(video_id, force=True)
+    
+    return {"success": True, "frames_extracted": len(frames)}
