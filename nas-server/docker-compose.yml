@@ -17,9 +17,9 @@ services:
       - FEATURE_BATCH_SIZE=100
       - CLUSTER_MIN_SAMPLES=5
     volumes:
-      - ./media/raw:/media/raw
-      - ./media/processed:/media/processed
+      - ./media:/media
       - ./cache:/cache
+      - ./config:/config
     depends_on:
       db:
         condition: service_healthy

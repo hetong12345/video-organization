@@ -1,6 +1,7 @@
 const API_BASE = '';
 
 let selectedVideos = new Set();
+let selectedDirectories = new Set();
 
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
@@ -30,6 +31,7 @@ function loadPage(page) {
             break;
         case 'videos':
             loadVideos();
+            loadDirectories();
             break;
         case 'clusters':
             loadClusters();
@@ -56,11 +58,64 @@ async function loadDashboard() {
         document.getElementById('stat-processing-videos').textContent = data.processing_videos;
         document.getElementById('stat-ready-videos').textContent = data.ready_videos;
         document.getElementById('stat-completed-videos').textContent = data.completed_videos;
-        document.getElementById('stat-pending-tasks').textContent = data.pending_tasks;
-        document.getElementById('stat-running-tasks').textContent = data.running_tasks;
         document.getElementById('stat-online-workers').textContent = data.online_workers;
     } catch (error) {
         console.error('Failed to load dashboard:', error);
+    }
+}
+
+async function loadDirectories() {
+    const container = document.getElementById('directory-list');
+    container.innerHTML = '<div class="loading">加载中...</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/directories`);
+        const data = await response.json();
+        
+        if (!data.directories || data.directories.length === 0) {
+            container.innerHTML = '<div class="loading">未发现视频目录，请在 /media 目录下放置视频</div>';
+            return;
+        }
+        
+        container.innerHTML = data.directories.map(d => `
+            <div class="directory-item">
+                <input type="checkbox" id="dir-${d.path}" value="${d.path}" onchange="toggleDirectory('${d.path}')">
+                <label for="dir-${d.path}">${d.path} (${d.video_count}个视频)</label>
+            </div>
+        `).join('');
+    } catch (error) {
+        container.innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+    }
+}
+
+function toggleDirectory(path) {
+    if (selectedDirectories.has(path)) {
+        selectedDirectories.delete(path);
+    } else {
+        selectedDirectories.add(path);
+    }
+}
+
+async function scanSelectedDirectories() {
+    if (selectedDirectories.size === 0) {
+        alert('请先选择要扫描的目录');
+        return;
+    }
+    
+    const dirs = Array.from(selectedDirectories);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directories: dirs })
+        });
+        
+        const data = await response.json();
+        alert(`扫描完成！\n${data.results.map(r => `${r.directory}: ${r.videos}个视频`).join('\n')}`);
+        loadVideos();
+    } catch (error) {
+        alert('扫描失败: ' + error.message);
     }
 }
 
@@ -75,7 +130,7 @@ async function loadVideos() {
         const videos = await response.json();
         
         if (videos.length === 0) {
-            container.innerHTML = '<div class="loading">暂无视频</div>';
+            container.innerHTML = '<div class="loading">暂无视频，请先扫描目录</div>';
             return;
         }
         
@@ -85,8 +140,6 @@ async function loadVideos() {
                 <div class="video-card-content">
                     <div class="video-card-title">${video.filename}</div>
                     <span class="video-card-status ${video.status}">${getStatusText(video.status)}</span>
-                    ${video.actors.length > 0 ? `<div style="margin-top:8px;color:#7f8c8d;font-size:12px;">演员: ${video.actors.join(', ')}</div>` : ''}
-                    ${video.tags.length > 0 ? `<div style="margin-top:4px;color:#7f8c8d;font-size:12px;">标签: ${video.tags.join(', ')}</div>` : ''}
                 </div>
             </div>
         `).join('');
@@ -209,13 +262,9 @@ async function loadReviewVideos() {
                         <label for="select-${video.id}">选择</label>
                     </div>
                     <div class="video-card-title">${video.filename}</div>
-                    <div style="color:#7f8c8d;font-size:12px;margin-bottom:8px;">
-                        演员: ${video.actors.join(', ') || '无'} | 标签: ${video.tags.join(', ') || '无'}
-                    </div>
                     <input type="text" id="rename-${video.id}" value="${video.recommended_name || ''}" placeholder="推荐命名">
                     <div class="review-card-actions">
                         <button class="btn-adopt" onclick="adoptVideo(${video.id})">采纳</button>
-                        <button class="btn-skip" onclick="skipVideo(${video.id})">忽略</button>
                     </div>
                 </div>
             </div>
@@ -290,17 +339,6 @@ async function adoptSelected() {
         loadDashboard();
     } catch (error) {
         alert('批量采纳失败: ' + error.message);
-    }
-}
-
-async function skipVideo(videoId) {
-    if (confirm('确定要忽略此视频吗？')) {
-        try {
-            await fetch(`${API_BASE}/api/videos/${videoId}`, { method: 'DELETE' });
-            loadReviewVideos();
-        } catch (error) {
-            alert('操作失败: ' + error.message);
-        }
     }
 }
 
@@ -379,9 +417,6 @@ function getStatusText(status) {
     const statusMap = {
         'pending': '待处理',
         'processing': '处理中',
-        'featured': '已提取特征',
-        'clustered': '已聚类',
-        'tagged': '已打标',
         'ready': '待采纳',
         'completed': '已完成',
         'failed': '失败'

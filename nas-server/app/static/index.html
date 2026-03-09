@@ -69,25 +69,23 @@
                         <div class="stat-label">在线Worker</div>
                     </div>
                 </div>
-                <div class="section">
-                    <h2>任务队列</h2>
-                    <div class="task-stats">
-                        <span>待分配: <strong id="stat-pending-tasks">0</strong></span>
-                        <span>运行中: <strong id="stat-running-tasks">0</strong></span>
-                    </div>
-                </div>
             </div>
             
             <div id="page-videos" class="page">
                 <h1>视频列表</h1>
+                <div class="section">
+                    <h2>扫描视频</h2>
+                    <div class="scan-panel">
+                        <button onclick="loadDirectories()">刷新目录</button>
+                        <div id="directory-list"></div>
+                        <button onclick="scanSelectedDirectories()" class="btn-primary">扫描选中的目录</button>
+                    </div>
+                </div>
                 <div class="filters">
                     <select id="video-status-filter">
                         <option value="">全部状态</option>
                         <option value="pending">待处理</option>
                         <option value="processing">处理中</option>
-                        <option value="featured">已提取特征</option>
-                        <option value="clustered">已聚类</option>
-                        <option value="tagged">已打标</option>
                         <option value="ready">待采纳</option>
                         <option value="completed">已完成</option>
                         <option value="failed">失败</option>

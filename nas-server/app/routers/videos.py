@@ -1,15 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List, Optional
 import os
-import shutil
 from app.database import get_db
-from app.models import Video, Frame, Face, VideoTag, Tag, VideoActor, Actor, VideoStatus
-from app.schemas import (
-    VideoCreate, VideoResponse, VideoListResponse, FrameResponse,
-    FaceResponse, AdoptRequest
-)
+from app.models import Video, Frame, VideoStatus
+from app.schemas import VideoCreate, VideoResponse, VideoListResponse, FrameResponse
 from app.config import settings
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -30,15 +25,8 @@ def list_videos(
     
     result = []
     for video in videos:
-        actors = db.query(Actor.name).join(VideoActor).filter(
-            VideoActor.video_id == video.id
-        ).all()
-        actor_names = [a[0] for a in actors]
-        
-        tags = db.query(Tag.name).join(VideoTag).filter(
-            VideoTag.video_id == video.id
-        ).all()
-        tag_names = [t[0] for t in tags]
+        actors = []
+        tags = []
         
         rep_frame = db.query(Frame).filter(
             Frame.video_id == video.id,
@@ -52,8 +40,8 @@ def list_videos(
             status=video.status,
             recommended_name=video.recommended_name,
             thumbnail_url=thumbnail_url,
-            actors=actor_names,
-            tags=tag_names
+            actors=actors,
+            tags=tags
         ))
     
     return result
@@ -82,60 +70,45 @@ def get_video_frames(video_id: int, db: Session = Depends(get_db)):
     return frames
 
 
-@router.get("/{video_id}/faces", response_model=List[FaceResponse])
-def get_video_faces(video_id: int, db: Session = Depends(get_db)):
-    faces = db.query(Face).join(Frame).filter(Frame.video_id == video_id).all()
-    return faces
-
-
-@router.post("/adopt")
-def adopt_videos(request: AdoptRequest, db: Session = Depends(get_db)):
+@router.post("/scan")
+def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(get_db)):
+    from app.services.video_processor import VideoScanner
+    from app.services.task_manager import task_manager
+    
+    if directories is None:
+        directories = [settings.RAW_VIDEO_DIR]
+    
     results = []
-    for video_id in request.video_ids:
-        video = db.query(Video).filter(Video.id == video_id).first()
-        if not video:
-            results.append({"video_id": video_id, "success": False, "error": "Not found"})
+    for directory in directories:
+        if not os.path.exists(directory):
+            results.append({"directory": directory, "error": "Directory not found", "videos": 0})
             continue
         
-        if video.status != VideoStatus.READY:
-            results.append({"video_id": video_id, "success": False, "error": "Not ready"})
-            continue
+        scanner = VideoScanner(directory)
+        new_videos = scanner.scan_directory()
         
-        custom_name = request.custom_names.get(str(video_id)) if request.custom_names else None
-        new_name = custom_name or video.recommended_name
+        for video_info in new_videos:
+            task_manager.extractor.extract_frames(video_info['id'])
         
-        if not new_name:
-            results.append({"video_id": video_id, "success": False, "error": "No name"})
-            continue
-        
-        actors = db.query(Actor.name).join(VideoActor).filter(
-            VideoActor.video_id == video.id
-        ).first()
-        actor_name = actors[0] if actors else "Unknown"
-        
-        target_dir = os.path.join(settings.PROCESSED_VIDEO_DIR, actor_name)
-        os.makedirs(target_dir, exist_ok=True)
-        
-        target_path = os.path.join(target_dir, new_name)
-        
-        try:
-            shutil.move(video.filepath, target_path)
-            video.target_path = target_path
-            video.status = VideoStatus.COMPLETED
-            db.commit()
-            results.append({"video_id": video_id, "success": True, "target_path": target_path})
-        except Exception as e:
-            results.append({"video_id": video_id, "success": False, "error": str(e)})
+        results.append({"directory": directory, "videos": len(new_videos)})
     
     return {"results": results}
 
 
-@router.delete("/{video_id}")
-def delete_video(video_id: int, db: Session = Depends(get_db)):
-    video = db.query(Video).filter(Video.id == video_id).first()
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+@router.get("/directories")
+def list_video_directories():
+    from app.services.task_manager import task_manager
     
-    db.delete(video)
-    db.commit()
-    return {"success": True}
+    dirs = []
+    for root, subdirs, files in os.walk('/media'):
+        for subdir in subdirs:
+            full_path = os.path.join(root, subdir)
+            video_count = sum(1 for f in os.listdir(full_path) 
+                            if os.path.splitext(f)[1].lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'})
+            if video_count > 0:
+                dirs.append({
+                    "path": full_path,
+                    "video_count": video_count
+                })
+    
+    return {"directories": dirs}

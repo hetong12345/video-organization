@@ -11,8 +11,8 @@ from app.models import Video, Frame, Task, VideoStatus, TaskType, TaskStatus
 class VideoScanner:
     SUPPORTED_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'}
     
-    def __init__(self):
-        self.raw_dir = settings.RAW_VIDEO_DIR
+    def __init__(self, raw_dir: str = None):
+        self.raw_dir = raw_dir or settings.RAW_VIDEO_DIR
     
     def scan_directory(self) -> List[dict]:
         new_videos = []
