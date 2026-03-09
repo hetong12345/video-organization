@@ -105,11 +105,13 @@ def list_system_directories(base_path: str = "/media"):
 
 
 @router.post("/scan")
-def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(get_db)):
+def scan_videos(data: dict, db: Session = Depends(get_db)):
     from app.services.video_processor import VideoScanner
     
-    if directories is None:
-        directories = [settings.RAW_VIDEO_DIR]
+    directories = data.get("directories", [])
+    
+    if not directories:
+        return {"results": [], "error": "No directories provided"}
     
     results = []
     for directory in directories:
@@ -126,8 +128,14 @@ def scan_videos(directories: Optional[List[str]] = None, db: Session = Depends(g
 
 
 @router.post("/start-process")
-def start_process(video_ids: List[int], force: bool = False, db: Session = Depends(get_db)):
+def start_process(data: dict, db: Session = Depends(get_db)):
     from app.services.video_processor import FrameExtractor
+    
+    video_ids = data.get("video_ids", [])
+    force = data.get("force", False)
+    
+    if not video_ids:
+        return {"results": [], "error": "No video_ids provided"}
     
     extractor = FrameExtractor()
     results = []
@@ -150,11 +158,13 @@ def start_process(video_ids: List[int], force: bool = False, db: Session = Depen
 
 
 @router.post("/adopt")
-def adopt_videos(
-    video_ids: List[int],
-    custom_names: Optional[dict] = None,
-    db: Session = Depends(get_db)
-):
+def adopt_videos(data: dict, db: Session = Depends(get_db)):
+    video_ids = data.get("video_ids", [])
+    custom_names = data.get("custom_names")
+    
+    if not video_ids:
+        return {"results": [], "error": "No video_ids provided"}
+    
     results = []
     
     for video_id in video_ids:

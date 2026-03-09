@@ -36,7 +36,16 @@ def list_workers(db: Session = Depends(get_db)):
     
     result = []
     for worker in workers:
-        is_online = (datetime.utcnow() - worker.last_heartbeat).total_seconds() < 300
+        # Handle timezone-aware datetime
+        last_heartbeat = worker.last_heartbeat
+        if last_heartbeat.tzinfo is not None:
+            # Convert to naive UTC datetime
+            from datetime import timezone
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            last_heartbeat_naive = last_heartbeat.replace(tzinfo=None)
+            is_online = (now_utc - last_heartbeat_naive).total_seconds() < 300
+        else:
+            is_online = (datetime.utcnow() - last_heartbeat).total_seconds() < 300
         
         current_task = None
         if worker.current_task_id:

@@ -81,6 +81,16 @@ class FrameExtractor:
     def __init__(self):
         self.cache_dir = settings.FRAME_CACHE_DIR
         os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # 初始化人脸检测模型
+        try:
+            from insightface.app import FaceAnalysis
+            self.face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
+            self.face_app.prepare(ctx_id=0, det_size=(640, 640))
+            print("Face detection model loaded")
+        except Exception as e:
+            print(f"Failed to load face detection model: {e}")
+            self.face_app = None
     
     def _get_video_info(self, filepath: str) -> Tuple[float, float, int]:
         """使用 ffprobe 获取视频信息"""
@@ -235,13 +245,45 @@ class FrameExtractor:
                 db.add(frame_record)
                 db.flush()
                 
-                task = Task(
-                    task_type=TaskType.FEATURE,
-                    status=TaskStatus.PENDING,
-                    video_id=video_id,
-                    frame_id=frame_record.id
-                )
-                db.add(task)
+                # 使用 InsightFace 检测人脸
+                faces = []
+                if self.face_app:
+                    try:
+                        faces = self.face_app.get(frame)
+                    except Exception as e:
+                        print(f"Face detection failed for frame {idx}: {e}")
+                
+                if len(faces) > 0:
+                    # 为每个人脸创建记录和特征提取任务
+                    for face_idx, face in enumerate(faces):
+                        face_record = Face(
+                            video_id=video_id,
+                            frame_id=frame_record.id,
+                            bounding_box=face.bbox.tolist(),
+                            confidence=float(face.det_score),
+                            embedding=face.embedding.tolist() if hasattr(face, 'embedding') else None
+                        )
+                        db.add(face_record)
+                        db.flush()
+                        
+                        # 创建特征提取任务（用于重新提取或更新）
+                        task = Task(
+                            task_type=TaskType.FEATURE,
+                            status=TaskStatus.PENDING,
+                            video_id=video_id,
+                            frame_id=frame_record.id,
+                            face_id=face_record.id
+                        )
+                        db.add(task)
+                else:
+                    # 没有人脸，也创建任务但只有 frame_id
+                    task = Task(
+                        task_type=TaskType.FEATURE,
+                        status=TaskStatus.PENDING,
+                        video_id=video_id,
+                        frame_id=frame_record.id
+                    )
+                    db.add(task)
                 
                 extracted_frames.append({
                     "frame_id": frame_record.id,

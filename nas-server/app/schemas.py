@@ -115,7 +115,7 @@ class TaskResponse(BaseModel):
 
 class TaskPullRequest(BaseModel):
     worker_id: str
-    task_types: List[TaskTypeEnum]
+    task_types: List[str]  # Accept strings like "feature", "cluster", "tag"
     max_tasks: int = 1
 
 

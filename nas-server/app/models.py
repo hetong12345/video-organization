@@ -166,3 +166,5 @@ class Worker(Base):
     current_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     status = Column(String(20), default="idle")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    current_task = relationship("Task", foreign_keys=[current_task_id])

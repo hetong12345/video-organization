@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 from app.database import get_db
-from app.models import Task, Video, Frame, Face, Cluster, TaskType, TaskStatus, VideoStatus
+from app.models import Task, Video, Frame, Face, Cluster, Tag, VideoTag, Actor, VideoActor, TaskType, TaskStatus, VideoStatus
 from app.schemas import (
     TaskCreate, TaskResponse, TaskPullRequest,
     FeatureSubmitRequest, ClusterSubmitRequest, TagSubmitRequest
@@ -43,7 +43,16 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 @router.post("/pull")
 def pull_tasks(request: TaskPullRequest, db: Session = Depends(get_db)):
     tasks = []
-    for task_type in request.task_types:
+    for task_type_str in request.task_types:
+        # Convert string to TaskType enum if needed
+        if isinstance(task_type_str, str):
+            try:
+                task_type = TaskType(task_type_str)
+            except ValueError:
+                continue
+        else:
+            task_type = task_type_str
+        
         available_tasks = db.query(Task).filter(
             Task.task_type == task_type,
             Task.status == TaskStatus.PENDING,
@@ -54,13 +63,21 @@ def pull_tasks(request: TaskPullRequest, db: Session = Depends(get_db)):
             task.status = TaskStatus.ASSIGNED
             task.worker_id = request.worker_id
             task.started_at = datetime.utcnow()
-            tasks.append({
+            
+            task_data = {
                 "id": task.id,
                 "task_type": task.task_type.value,
                 "video_id": task.video_id,
-                "frame_id": task.frame_id,
-                "face_id": task.face_id
-            })
+            }
+            # Only include optional fields if they exist
+            if task.frame_id:
+                task_data["frame_id"] = task.frame_id
+            if task.face_id:
+                task_data["face_id"] = task.face_id
+            if task.cluster_id:
+                task_data["cluster_id"] = task.cluster_id
+                
+            tasks.append(task_data)
         
         db.commit()
     

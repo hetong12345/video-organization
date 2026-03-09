@@ -1,7 +1,9 @@
 import os
+import sys
 import time
 import uuid
 import threading
+import argparse
 import requests
 import numpy as np
 from typing import List, Dict, Optional
@@ -19,17 +21,29 @@ except ImportError:
 
 
 class WorkerConfig:
-    def __init__(self):
-        self.nas_url = os.getenv("NAS_URL", "http://localhost:8000")
-        self.worker_id = os.getenv("WORKER_ID", f"worker-{uuid.uuid4().hex[:8]}")
-        self.max_concurrent = int(os.getenv("MAX_CONCURRENT", "2"))
-        self.heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "30"))
-        self.poll_interval = int(os.getenv("POLL_INTERVAL", "5"))
+    def __init__(self, args=None):
+        # 优先使用命令行参数，其次环境变量，最后默认值
+        self.nas_url = args.nas_url if args and args.nas_url else os.getenv("NAS_URL", "http://localhost:8000")
         
-        self.feature_model_path = os.getenv("FEATURE_MODEL_PATH", "buffalo_l")
-        self.llm_model_path = os.getenv("LLM_MODEL_PATH", "Qwen/Qwen2.5-7B-Instruct")
+        # Worker ID
+        if args and args.worker_id:
+            self.worker_id = args.worker_id
+        elif os.getenv("WORKER_ID"):
+            self.worker_id = os.getenv("WORKER_ID")
+        else:
+            import socket
+            hostname = socket.gethostname()
+            self.worker_id = f"worker-{hostname}-gpu"
         
-        self.enabled_tasks = os.getenv("ENABLED_TASKS", "feature,cluster,tag").split(",")
+        self.max_concurrent = args.max_concurrent if args and args.max_concurrent else int(os.getenv("MAX_CONCURRENT", "2"))
+        self.heartbeat_interval = args.heartbeat_interval if args and args.heartbeat_interval else int(os.getenv("HEARTBEAT_INTERVAL", "30"))
+        self.poll_interval = args.poll_interval if args and args.poll_interval else int(os.getenv("POLL_INTERVAL", "5"))
+        
+        self.feature_model_path = args.feature_model if args and args.feature_model else os.getenv("FEATURE_MODEL_PATH", "buffalo_l")
+        self.llm_model_path = args.llm_model if args and args.llm_model else os.getenv("LLM_MODEL_PATH", "Qwen/Qwen2.5-7B-Instruct")
+        
+        enabled_tasks = args.enabled_tasks if args and args.enabled_tasks else os.getenv("ENABLED_TASKS", "feature,cluster,tag")
+        self.enabled_tasks = [t.strip() for t in enabled_tasks.split(",")]
 
 
 class FeatureExtractor:
@@ -215,25 +229,34 @@ class Worker:
         response.raise_for_status()
     
     def _task_loop(self):
+        print(f"Task loop started for worker {self.config.worker_id}")
         while self.running:
             try:
                 if len(self.active_tasks) < self.config.max_concurrent:
+                    print(f"Pulling tasks... (active: {len(self.active_tasks)}, max: {self.config.max_concurrent})")
                     tasks = self._pull_tasks()
+                    print(f"Pulled {len(tasks)} tasks")
                     for task in tasks:
+                        print(f"Submitting task {task['id']} (type: {task['task_type']}) to executor")
                         future = self.executor.submit(self._process_task, task)
                         self.active_tasks[task["id"]] = future
                 
                 completed = [tid for tid, f in self.active_tasks.items() if f.done()]
                 for tid in completed:
+                    print(f"Task {tid} completed")
                     del self.active_tasks[tid]
                 
             except Exception as e:
                 print(f"Task loop error: {e}")
+                import traceback
+                traceback.print_exc()
             
             time.sleep(self.config.poll_interval)
     
     def _pull_tasks(self) -> List[Dict]:
         task_types = [t.strip() for t in self.config.enabled_tasks if t.strip()]
+        
+        print(f"Pulling tasks with task_types: {task_types}")
         
         response = self.session.post(
             f"{self.config.nas_url}/api/tasks/pull",
@@ -244,7 +267,9 @@ class Worker:
             }
         )
         response.raise_for_status()
-        return response.json().get("tasks", [])
+        data = response.json()
+        print(f"Pull tasks response: {data}")
+        return data.get("tasks", [])
     
     def _process_task(self, task: Dict):
         task_id = task["id"]
@@ -271,11 +296,20 @@ class Worker:
         self._send_heartbeat("idle")
     
     def _process_feature_task(self, task: Dict):
+        # Check if face_id exists
+        if "face_id" not in task:
+            raise ValueError(f"Task {task['id']} missing face_id: {task}")
+        
         face_id = task["face_id"]
+        
+        print(f"Processing feature task for face {face_id}")
         
         frame_response = self.session.get(
             f"{self.config.nas_url}/api/faces/{face_id}"
         )
+        if frame_response.status_code != 200:
+            raise ValueError(f"Failed to get face {face_id}: {frame_response.text}")
+        
         frame_data = frame_response.json()
         
         frame_id = frame_data["frame_id"]
@@ -298,8 +332,11 @@ class Worker:
                 "embedding": embedding.tolist()
             }
         )
-        response.raise_for_status()
-        print(f"Feature task {task['id']} completed")
+        
+        if response.status_code != 200:
+            raise ValueError(f"Failed to save embedding: {response.text}")
+        
+        print(f"Feature task {task['id']} completed for face {face_id}")
     
     def _process_cluster_task(self, task: Dict):
         embeddings = []
@@ -400,7 +437,34 @@ class Worker:
 
 
 if __name__ == "__main__":
-    worker = Worker()
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="Video Processing Worker")
+    
+    parser.add_argument("--nas-url", type=str, help="NAS server URL (e.g., http://192.168.88.10:8000)")
+    parser.add_argument("--worker-id", type=str, help="Worker ID (e.g., worker-gpu-1)")
+    parser.add_argument("--max-concurrent", type=int, help="Maximum concurrent tasks")
+    parser.add_argument("--heartbeat-interval", type=int, help="Heartbeat interval in seconds")
+    parser.add_argument("--poll-interval", type=int, help="Task poll interval in seconds")
+    parser.add_argument("--feature-model", type=str, help="Feature extraction model path")
+    parser.add_argument("--llm-model", type=str, help="LLM model path")
+    parser.add_argument("--enabled-tasks", type=str, help="Enabled task types (comma-separated)")
+    
+    args = parser.parse_args()
+    
+    # 打印配置信息
+    config = WorkerConfig(args)
+    print(f"=== Worker Configuration ===")
+    print(f"NAS URL: {config.nas_url}")
+    print(f"Worker ID: {config.worker_id}")
+    print(f"Max Concurrent: {config.max_concurrent}")
+    print(f"Heartbeat Interval: {config.heartbeat_interval}s")
+    print(f"Poll Interval: {config.poll_interval}s")
+    print(f"Feature Model: {config.feature_model_path}")
+    print(f"LLM Model: {config.llm_model_path}")
+    print(f"Enabled Tasks: {config.enabled_tasks}")
+    print(f"============================")
+    
+    worker = Worker(config)
     try:
         worker.start()
     except KeyboardInterrupt:
