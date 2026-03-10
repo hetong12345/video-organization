@@ -191,7 +191,7 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
     return video
 
 
-@router.get("/{video_id}/frames", response_model=List[FrameResponse])
+@router.get("/{video_id}/frames")
 def get_video_frames(video_id: int, db: Session = Depends(get_db)):
     frames = db.query(Frame).filter(Frame.video_id == video_id).all()
     

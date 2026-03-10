@@ -69,11 +69,13 @@ class Face(Base):
     __tablename__ = "faces"
 
     id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False)
     frame_id = Column(Integer, ForeignKey("frames.id"), nullable=False)
     bbox_x = Column(Integer)
     bbox_y = Column(Integer)
     bbox_w = Column(Integer)
     bbox_h = Column(Integer)
+    confidence = Column(Float, default=1.0)
     gender = Column(String(10))
     age = Column(Integer)
     quality_score = Column(Float)
@@ -89,7 +91,9 @@ class Cluster(Base):
     __tablename__ = "clusters"
 
     id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
     actor_name = Column(String(100), nullable=True)
+    name = Column(String(100), nullable=True)
     representative_face_id = Column(Integer, ForeignKey("faces.id"), nullable=True)
     face_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -125,7 +125,11 @@ def submit_cluster(request: ClusterSubmitRequest, db: Session = Depends(get_db))
             
             cluster = db.query(Cluster).filter(Cluster.id == result["cluster_id"]).first()
             if not cluster:
-                cluster = Cluster(id=result["cluster_id"], face_count=0)
+                cluster = Cluster(
+                    id=result["cluster_id"],
+                    video_id=task.video_id,
+                    face_count=0
+                )
                 db.add(cluster)
             cluster.face_count += 1
     
@@ -217,8 +221,22 @@ def fail_task(task_id: int, error_message: str = "", db: Session = Depends(get_d
     return {"success": True}
 
 
+@router.post("/{task_id}/fail")
+def fail_task(task_id: int, error_message: str, db: Session = Depends(get_db)):
+    """Worker 报告任务失败"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        task.status = TaskStatus.FAILED
+        task.error_message = error_message
+        task.worker_id = None
+        db.commit()
+        print(f"Task {task_id} marked as failed: {error_message}")
+    return {"success": True}
+
+
 @router.post("/{task_id}/retry")
 def retry_task(task_id: int, db: Session = Depends(get_db)):
+    """手动重试失败任务"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -229,6 +247,7 @@ def retry_task(task_id: int, db: Session = Depends(get_db)):
     task.retry_count += 1
     db.commit()
     
+    print(f"Task {task_id} retry scheduled (attempt {task.retry_count})")
     return {"success": True}
 
 

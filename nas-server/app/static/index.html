@@ -362,7 +362,7 @@
         </div>
         
         <div class="flex justify-between items-center mb-3 mt-3">
-          <strong>抽帧 ({{ frames.length }})</strong>
+          <strong>抽帧 ({{ frames.length }}) - 共检测到 {{ totalFaces }} 张人脸</strong>
           <button class="action-btn danger" style="padding:6px 14px;font-size:12px" @click="reExtract" :disabled="reExtracting">
             {{ reExtracting ? '抽帧中...' : '🔄 重新抽帧' }}
           </button>
@@ -374,8 +374,35 @@
             <div class="video-info" style="padding:8px">
               <div style="font-size:11px;color:#71717a">{{ f.timestamp?.toFixed(1) }}s</div>
               <div style="font-size:11px;color:#a855f7" v-if="f.face_count">{{ f.face_count }} 张人脸</div>
+              <button v-if="f.face_count > 0" class="action-btn secondary mt-2" style="padding:4px 8px;font-size:11px;width:100%" @click="viewFrameFaces(f)">👁 查看人脸</button>
             </div>
           </div>
+        </div>
+      </div>
+    </el-dialog>
+    
+    <!-- 人脸详情弹窗 -->
+    <el-dialog v-model="showFaceDialog" title="人脸详情" width="800px">
+      <div v-if="currentFrame">
+        <div class="mb-3"><strong>帧时间:</strong> {{ currentFrame.timestamp?.toFixed(1) }}s</div>
+        <div class="mb-3"><strong>人脸数量:</strong> {{ frameFaces.length }}</div>
+        
+        <div class="video-grid" v-if="frameFaces.length > 0">
+          <div v-for="face in frameFaces" :key="face.id" class="video-card">
+            <img :src="`/api/frames/${face.frame_id}/image`" class="video-thumbnail" style="height:150px">
+            <div class="video-info">
+              <div style="font-size:12px;color:#71717a">置信度：{{ (face.confidence * 100).toFixed(1) }}%</div>
+              <div style="font-size:12px;color:#71717a" v-if="face.cluster_id">聚类：#{{ face.cluster_id }}</div>
+              <div style="font-size:12px;color:#71717a" v-if="face.actor_name">角色：{{ face.actor_name }}</div>
+              <div style="font-size:11px;color:#3f3f46;margin-top:8px;font-family:monospace">
+                位置：[{{ face.bounding_box?.[0]?.toFixed(0) }}, {{ face.bounding_box?.[1]?.toFixed(0) }}, {{ face.bounding_box?.[2]?.toFixed(0) }}, {{ face.bounding_box?.[3]?.toFixed(0) }}]
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <div class="icon">👤</div>
+          <div>该帧未检测到人脸</div>
         </div>
       </div>
     </el-dialog>
@@ -383,15 +410,16 @@
 
   <script>
     const { createApp, ref, reactive, onMounted, watch, computed } = Vue;
-    const { ElMessage } = ElementPlus;
     
-    createApp({
+    const app = createApp({
       setup() {
         const api = axios.create({ baseURL: '' });
+        const { ElMessage } = ElementPlus;
         const page = ref('dashboard');
         const loading = ref(false);
         const showDialog = ref(false);
         const showDirSelector = ref(false);
+        const showFaceDialog = ref(false);
         const reExtracting = ref(false);
         
         // 数据
@@ -408,7 +436,9 @@
         const reviewList = ref([]);
         const frames = ref([]);
         const currentVideo = ref(null);
+        const currentFrame = ref(null);
         const videoTasks = ref([]);
+        const frameFaces = ref([]);
         
         // 选择状态
         const selectedDirs = ref([]);
@@ -568,6 +598,19 @@
           } catch (e) { ElMessage.error('加载失败'); }
         };
         
+        const totalFaces = computed(() => {
+          return frames.value.reduce((sum, f) => sum + (f.face_count || 0), 0);
+        });
+        
+        const viewFrameFaces = async (frame) => {
+          try {
+            currentFrame.value = frame;
+            const res = await api.get(`/api/frames/${frame.id}/faces`);
+            frameFaces.value = res.data;
+            showFaceDialog.value = true;
+          } catch (e) { ElMessage.error('加载失败'); }
+        };
+        
         const groupedTasks = computed(() => {
           const groups = {
             feature: { type: 'feature', name: '特征提取', total: 0, completed: 0 },
@@ -644,15 +687,18 @@
         });
         
         return {
-          page, loading, showDialog, showDirSelector, reExtracting, stats, systemDirs, dirs, videos, tasks, workers,
-          reviewList, frames, currentVideo, videoTasks, selectedDirs, selectedVideos, filter, reviewNames,
+          page, loading, showDialog, showDirSelector, showFaceDialog, reExtracting, stats, systemDirs, dirs, videos, tasks, workers,
+          reviewList, frames, currentVideo, currentFrame, videoTasks, frameFaces, selectedDirs, selectedVideos, filter, reviewNames,
           clusterVideoFilter, clusters,
           statusText, taskTypeText, taskStatusText, formatTime, calcDuration, refreshAll, loadSystemDirs, toggleDir, confirmDirSelection, scanDirs,
           toggleVideo, startProcess, openVideo, reExtract, loadReview, adopt, loadTasks, retryTask, loadWorkers,
-          loadClusters, saveClusterName, viewClusterFaces, groupedTasks, getTaskColor
+          loadClusters, saveClusterName, viewClusterFaces, groupedTasks, getTaskColor, totalFaces, viewFrameFaces
         };
       }
-    }).use(ElementPlus).mount('#app');
+    });
+    
+    app.use(ElementPlus);
+    app.mount('#app');
   </script>
 </body>
 </html>

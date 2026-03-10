@@ -10,6 +10,20 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
 
+# 提前导入 torch 和量化配置
+try:
+    import torch
+    from transformers import BitsAndBytesConfig
+    GPU_AVAILABLE = torch.cuda.is_available()
+    if GPU_AVAILABLE:
+        print(f"GPU available: {torch.cuda.get_device_name(0)}")
+    else:
+        print("GPU not available, will use CPU")
+except ImportError as e:
+    print(f"Failed to import torch: {e}")
+    GPU_AVAILABLE = False
+    BitsAndBytesConfig = None
+
 # 提前导入 insightface
 try:
     from insightface.app import FaceAnalysis
@@ -134,24 +148,41 @@ class TagGenerator:
         if self.model is None:
             print(f"Loading LLM model on {self.device}...")
             
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            )
-            
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.config.llm_model_path,
-                trust_remote_code=True
-            )
-            
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.config.llm_model_path,
-                quantization_config=quantization_config,
-                device_map="auto",
-                trust_remote_code=True
-            )
+            if self.device == "cuda" and GPU_AVAILABLE and BitsAndBytesConfig:
+                # GPU 模式：使用 4bit 量化
+                print("Using 4-bit quantization for GPU")
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
+                
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.config.llm_model_path,
+                    trust_remote_code=True
+                )
+                
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.config.llm_model_path,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    trust_remote_code=True
+                )
+            else:
+                # CPU 模式：不量化，直接加载
+                print("Warning: Running LLM on CPU will be very slow!")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.config.llm_model_path,
+                    trust_remote_code=True
+                )
+                
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.config.llm_model_path,
+                    device_map="cpu",
+                    trust_remote_code=True,
+                    torch_dtype=torch.float32
+                )
             print("LLM model loaded.")
     
     def generate_tags(self, image_data: bytes) -> List[str]:
@@ -434,10 +465,19 @@ class Worker:
                 "embedding": face.embedding.tolist() if hasattr(face, 'embedding') else None
             }
             
+            print(f"Creating face record: {face_data}")
+            print(f"POST to: {self.config.nas_url}/api/faces")
+            
             response = self.session.post(f"{self.config.nas_url}/api/faces", json=face_data)
+            
+            print(f"Response status: {response.status_code}")
+            print(f"Response body: {response.text}")
+            
             if response.status_code == 200:
                 face_id = response.json()["id"]
-                print(f"Created face record {face_id} for frame {frame_id}")
+                print(f"✓ Created face record {face_id} for frame {frame_id}")
+            else:
+                print(f"✗ Failed to create face record: {response.status_code} - {response.text}")
         
         # 标记任务为完成
         self.session.post(
@@ -539,6 +579,7 @@ class Worker:
                 f"{self.config.nas_url}/api/tasks/{task_id}/fail",
                 params={"error_message": error_message}
             )
+            print(f"Reported task {task_id} failure: {error_message}")
         except Exception as e:
             print(f"Failed to report task failure: {e}")
 

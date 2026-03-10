@@ -20,7 +20,6 @@ services:
       - ./media:/media
       - ./cache:/cache
       - ./config:/config
-      - ./data/postgres:/var/lib/postgresql/data
     depends_on:
       db:
         condition: service_healthy
@@ -36,7 +35,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=video_org
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -46,6 +45,10 @@ services:
       retries: 10
     networks:
       - video-org-network
+
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   video-org-network:

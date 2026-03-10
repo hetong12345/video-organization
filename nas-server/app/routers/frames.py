@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from typing import List
 from app.database import get_db
 from app.models import Frame, Face
-from app.config import settings
+from app.schemas import FrameResponse
 import os
 
 router = APIRouter(prefix="/api/frames", tags=["frames"])
@@ -21,31 +22,27 @@ def get_frame_image(frame_id: int, db: Session = Depends(get_db)):
     return FileResponse(frame.frame_path, media_type="image/jpeg")
 
 
-@router.get("/{frame_id}")
+@router.get("/{frame_id}", response_model=FrameResponse)
 def get_frame(frame_id: int, db: Session = Depends(get_db)):
     frame = db.query(Frame).filter(Frame.id == frame_id).first()
     if not frame:
         raise HTTPException(status_code=404, detail="Frame not found")
-    
-    return {
-        "id": frame.id,
-        "video_id": frame.video_id,
-        "frame_path": frame.frame_path,
-        "frame_index": frame.frame_index,
-        "timestamp": frame.timestamp,
-        "is_representative": frame.is_representative
-    }
+    return frame
 
 
 @router.get("/{frame_id}/faces")
 def get_frame_faces(frame_id: int, db: Session = Depends(get_db)):
+    """获取某帧的所有人脸"""
     faces = db.query(Face).filter(Face.frame_id == frame_id).all()
-    return [{
-        "id": f.id,
-        "bbox": [f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h],
-        "gender": f.gender,
-        "age": f.age,
-        "quality_score": f.quality_score,
-        "cluster_id": f.cluster_id,
-        "actor_name": f.actor_name
-    } for f in faces]
+    return [
+        {
+            "id": face.id,
+            "frame_id": face.frame_id,
+            "video_id": face.video_id,
+            "bounding_box": face.bounding_box,
+            "confidence": face.confidence,
+            "cluster_id": face.cluster_id,
+            "actor_name": None  # 可以后续添加
+        }
+        for face in faces
+    ]
