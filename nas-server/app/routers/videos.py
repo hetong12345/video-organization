@@ -209,6 +209,7 @@ def get_video_frames(video_id: int, db: Session = Depends(get_db)):
             "face_count": face_count
         }
         result.append(frame_dict)
+        print(f"Frame {frame.id}: {face_count} faces")
     
     return result
 

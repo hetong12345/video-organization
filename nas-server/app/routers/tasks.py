@@ -107,6 +107,21 @@ def submit_feature(request: FeatureSubmitRequest, db: Session = Depends(get_db))
         
         if unprocessed_faces == 0:
             video.status = VideoStatus.FEATURED
+            
+            # 创建聚类任务
+            existing_cluster_task = db.query(Task).filter(
+                Task.video_id == video.id,
+                Task.task_type == TaskType.CLUSTER
+            ).first()
+            
+            if not existing_cluster_task:
+                cluster_task = Task(
+                    task_type=TaskType.CLUSTER,
+                    status=TaskStatus.PENDING,
+                    video_id=video.id
+                )
+                db.add(cluster_task)
+                print(f"Created cluster task for video {video.id}")
     
     db.commit()
     return {"success": True}

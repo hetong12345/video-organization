@@ -39,10 +39,10 @@ def get_frame_faces(frame_id: int, db: Session = Depends(get_db)):
             "id": face.id,
             "frame_id": face.frame_id,
             "video_id": face.video_id,
-            "bounding_box": face.bounding_box,
+            "bounding_box": [face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h],
             "confidence": face.confidence,
             "cluster_id": face.cluster_id,
-            "actor_name": None  # 可以后续添加
+            "actor_name": face.actor_name
         }
         for face in faces
     ]
