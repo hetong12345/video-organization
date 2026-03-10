@@ -10,6 +10,16 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
 
+# 提前导入 insightface
+try:
+    from insightface.app import FaceAnalysis
+    INSIGHTFACE_AVAILABLE = True
+    print("InsightFace imported successfully")
+except ImportError as e:
+    print(f"Failed to import InsightFace: {e}")
+    INSIGHTFACE_AVAILABLE = False
+    FaceAnalysis = None
+
 try:
     import torch
     from insightface.app import FaceAnalysis
@@ -274,8 +284,20 @@ class Worker:
     def _process_task(self, task: Dict):
         task_id = task["id"]
         task_type = task["task_type"]
+        video_id = task.get("video_id", "unknown")
         
-        print(f"Processing task {task_id} (type: {task_type})")
+        print(f"\n{'='*60}")
+        print(f"Processing task {task_id} (type: {task_type}) for video {video_id}")
+        print(f"{'='*60}")
+        
+        # 发送开始通知
+        try:
+            self.session.post(
+                f"{self.config.nas_url}/api/tasks/{task_id}/start",
+                json={"worker_id": self.config.worker_id}
+            )
+        except Exception as e:
+            print(f"Failed to send start notification: {e}")
         
         try:
             self._send_heartbeat("busy", task_id)
@@ -289,20 +311,42 @@ class Worker:
             else:
                 print(f"Unknown task type: {task_type}")
             
+            # 发送完成通知
+            try:
+                self.session.post(
+                    f"{self.config.nas_url}/api/tasks/{task_id}/complete",
+                    json={"worker_id": self.config.worker_id}
+                )
+            except Exception as e:
+                print(f"Failed to send complete notification: {e}")
+            
+            print(f"✓ Task {task_id} completed successfully\n")
+            
         except Exception as e:
-            print(f"Task {task_id} failed: {e}")
+            print(f"✗ Task {task_id} failed: {e}")
+            import traceback
+            traceback.print_exc()
             self._report_failure(task_id, str(e))
         
         self._send_heartbeat("idle")
     
     def _process_feature_task(self, task: Dict):
-        # Check if face_id exists
-        if "face_id" not in task:
-            raise ValueError(f"Task {task['id']} missing face_id: {task}")
+        print(f"Processing feature task {task['id']}")
         
+        # 情况 1: 任务已经有 face_id，直接处理
+        if "face_id" in task:
+            self._process_existing_face(task)
+        # 情况 2: 任务只有 frame_id，需要先检测人脸
+        elif "frame_id" in task:
+            self._detect_faces_in_frame(task)
+        else:
+            raise ValueError(f"Task {task['id']} missing both face_id and frame_id: {task}")
+    
+    def _process_existing_face(self, task: Dict):
+        """处理已有人脸记录的特征提取"""
         face_id = task["face_id"]
         
-        print(f"Processing feature task for face {face_id}")
+        print(f"Processing existing face {face_id}")
         
         frame_response = self.session.get(
             f"{self.config.nas_url}/api/faces/{face_id}"
@@ -311,7 +355,6 @@ class Worker:
             raise ValueError(f"Failed to get face {face_id}: {frame_response.text}")
         
         frame_data = frame_response.json()
-        
         frame_id = frame_data["frame_id"]
         
         image_response = self.session.get(
@@ -337,6 +380,70 @@ class Worker:
             raise ValueError(f"Failed to save embedding: {response.text}")
         
         print(f"Feature task {task['id']} completed for face {face_id}")
+    
+    def _detect_faces_in_frame(self, task: Dict):
+        """在帧中检测人脸并创建记录"""
+        frame_id = task["frame_id"]
+        video_id = task.get("video_id")
+        
+        print(f"Detecting faces in frame {frame_id}")
+        
+        # 检查 insightface 是否可用
+        if not INSIGHTFACE_AVAILABLE:
+            raise RuntimeError("InsightFace is not installed. Cannot detect faces.")
+        
+        # 获取帧图片
+        image_response = self.session.get(
+            f"{self.config.nas_url}/api/frames/{frame_id}/image"
+        )
+        if image_response.status_code != 200:
+            raise ValueError(f"Failed to get frame {frame_id}: {image_response.text}")
+        
+        image_data = image_response.content
+        image_array = np.frombuffer(image_data, np.uint8)
+        frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            raise ValueError(f"Failed to decode frame {frame_id}")
+        
+        # 检测人脸
+        if not hasattr(self, 'face_app') or self.face_app is None:
+            self.face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
+            self.face_app.prepare(ctx_id=0, det_size=(640, 640))
+        
+        faces = self.face_app.get(frame)
+        
+        if len(faces) == 0:
+            print(f"No faces detected in frame {frame_id}")
+            # 标记任务为完成（没有人脸）
+            self.session.post(
+                f"{self.config.nas_url}/api/tasks/{task['id']}/complete",
+                json={"result": {"faces_detected": 0}}
+            )
+            return
+        
+        print(f"Detected {len(faces)} faces in frame {frame_id}")
+        
+        # 为每个人脸创建记录
+        for idx, face in enumerate(faces):
+            face_data = {
+                "video_id": video_id,
+                "frame_id": frame_id,
+                "bounding_box": face.bbox.tolist(),
+                "confidence": float(face.det_score),
+                "embedding": face.embedding.tolist() if hasattr(face, 'embedding') else None
+            }
+            
+            response = self.session.post(f"{self.config.nas_url}/api/faces", json=face_data)
+            if response.status_code == 200:
+                face_id = response.json()["id"]
+                print(f"Created face record {face_id} for frame {frame_id}")
+        
+        # 标记任务为完成
+        self.session.post(
+            f"{self.config.nas_url}/api/tasks/{task['id']}/complete",
+            json={"result": {"faces_detected": len(faces)}}
+        )
     
     def _process_cluster_task(self, task: Dict):
         embeddings = []

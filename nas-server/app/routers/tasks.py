@@ -226,5 +226,49 @@ def retry_task(task_id: int, db: Session = Depends(get_db)):
     task.status = TaskStatus.PENDING
     task.worker_id = None
     task.error_message = None
+    task.retry_count += 1
     db.commit()
+    
+    return {"success": True}
+
+
+@router.post("/{task_id}/start")
+def start_task(task_id: int, request: dict, db: Session = Depends(get_db)):
+    """Worker 报告任务开始执行"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        task.status = TaskStatus.RUNNING
+        task.worker_id = request.get("worker_id")
+        task.started_at = datetime.utcnow()
+        db.commit()
+        print(f"Task {task_id} started by worker {request.get('worker_id')}")
+    return {"success": True}
+
+
+@router.post("/{task_id}/complete")
+def complete_task(task_id: int, request: dict, db: Session = Depends(get_db)):
+    """Worker 报告任务完成"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        task.status = TaskStatus.COMPLETED
+        task.completed_at = datetime.utcnow()
+        db.commit()
+        print(f"Task {task_id} completed")
+        
+        # 检查是否所有特征提取任务都完成了
+        if task.task_type == TaskType.FEATURE:
+            video_id = task.video_id
+            pending_feature_tasks = db.query(Task).filter(
+                Task.video_id == video_id,
+                Task.task_type == TaskType.FEATURE,
+                Task.status.in_([TaskStatus.PENDING, TaskStatus.RUNNING])
+            ).count()
+            
+            if pending_feature_tasks == 0:
+                # 所有特征提取完成，更新视频状态为 CLUSTERED
+                video = db.query(Video).filter(Video.id == video_id).first()
+                if video:
+                    video.status = VideoStatus.CLUSTERED
+                    db.commit()
+                    print(f"Video {video_id} all features extracted, status updated to CLUSTERED")
     return {"success": True}

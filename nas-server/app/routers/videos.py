@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 from app.database import get_db
-from app.models import Video, Frame, Task, VideoStatus, TaskType, TaskStatus
+from app.models import Video, Frame, Face, Task, VideoStatus, TaskType, TaskStatus
 from app.schemas import VideoCreate, VideoResponse, VideoListResponse, FrameResponse
 from app.config import settings
 
@@ -194,7 +194,41 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
 @router.get("/{video_id}/frames", response_model=List[FrameResponse])
 def get_video_frames(video_id: int, db: Session = Depends(get_db)):
     frames = db.query(Frame).filter(Frame.video_id == video_id).all()
-    return frames
+    
+    # 统计每帧的人脸数量
+    result = []
+    for frame in frames:
+        face_count = db.query(Face).filter(Face.frame_id == frame.id).count()
+        frame_dict = {
+            "id": frame.id,
+            "video_id": frame.video_id,
+            "frame_path": frame.frame_path,
+            "frame_index": frame.frame_index,
+            "timestamp": frame.timestamp,
+            "is_representative": frame.is_representative,
+            "face_count": face_count
+        }
+        result.append(frame_dict)
+    
+    return result
+
+
+@router.get("/{video_id}/tasks")
+def get_video_tasks(video_id: int, db: Session = Depends(get_db)):
+    """获取视频的所有任务"""
+    tasks = db.query(Task).filter(Task.video_id == video_id).all()
+    return [
+        {
+            "id": t.id,
+            "task_type": t.task_type.value,
+            "status": t.status.value,
+            "video_id": t.video_id,
+            "worker_id": t.worker_id,
+            "started_at": t.started_at.isoformat() if t.started_at else None,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None
+        }
+        for t in tasks
+    ]
 
 
 @router.post("/{video_id}/re-extract")

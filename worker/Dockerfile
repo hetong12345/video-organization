@@ -23,8 +23,22 @@ RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
 
 WORKDIR /app
 
+# 先复制代码，方便调试
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# 安装依赖，分步进行便于定位问题
+RUN pip install --no-cache-dir --upgrade pip && \
+    echo "Installing packages..." && \
+    pip install --no-cache-dir requests numpy opencv-python-headless pillow && \
+    echo "Installing torch..." && \
+    pip install --no-cache-dir torch torchvision && \
+    echo "Installing insightface..." && \
+    pip install --no-cache-dir insightface onnxruntime-gpu && \
+    echo "Installing other packages..." && \
+    pip install --no-cache-dir transformers accelerate bitsandbytes hdbscan scikit-learn && \
+    echo "Verifying installation..." && \
+    python -c "import insightface; print('insightface:', insightface.__version__)" && \
+    python -c "import torch; print('torch:', torch.__version__)"
 
 COPY worker.py .
 

@@ -1,81 +1,83 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List
+from typing import List, Optional
 from app.database import get_db
-from app.models import Cluster, Face, Actor, VideoActor, Video, VideoStatus
-from app.schemas import ClusterResponse, ClusterNameRequest
+from app.models import Cluster, Face, Video
+from app.schemas import ClusterResponse
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 
-@router.get("", response_model=List[ClusterResponse])
-def list_clusters(db: Session = Depends(get_db)):
-    clusters = db.query(Cluster).order_by(Cluster.face_count.desc()).all()
+@router.get("", response_model=List[dict])
+def list_clusters(
+    video_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """获取所有聚类，可按视频筛选"""
+    query = db.query(Cluster)
+    
+    if video_id:
+        query = query.filter(Cluster.video_id == video_id)
+    
+    clusters = query.all()
     
     result = []
     for cluster in clusters:
-        rep_face = db.query(Face).filter(Face.id == cluster.representative_face_id).first()
-        rep_face_url = f"/api/faces/{rep_face.id}/image" if rep_face else None
+        # 获取该聚类的所有人脸
+        faces = db.query(Face).filter(Face.cluster_id == cluster.id).all()
         
-        result.append(ClusterResponse(
-            id=cluster.id,
-            actor_name=cluster.actor_name,
-            face_count=cluster.face_count,
-            representative_face_id=cluster.representative_face_id,
-            representative_face_url=rep_face_url
-        ))
+        # 获取预览人脸（前 10 张）
+        preview_faces = []
+        for face in faces[:10]:
+            frame = db.query(Face).filter(Face.id == face.id).first()
+            preview_faces.append({
+                "id": face.id,
+                "frame_id": face.frame_id,
+                "video_id": face.video_id
+            })
+        
+        result.append({
+            "id": cluster.id,
+            "name": cluster.name,
+            "video_id": cluster.video_id,
+            "face_count": len(faces),
+            "preview_faces": preview_faces,
+            "editing": False
+        })
     
     return result
 
 
-@router.get("/{cluster_id}/faces")
-def get_cluster_faces(cluster_id: int, limit: int = 20, db: Session = Depends(get_db)):
-    faces = db.query(Face).filter(Face.cluster_id == cluster_id).limit(limit).all()
-    return [{"id": f.id, "frame_id": f.frame_id, "image_url": f"/api/faces/{f.id}/image"} for f in faces]
-
-
-@router.post("/name")
-def name_cluster(request: ClusterNameRequest, db: Session = Depends(get_db)):
-    cluster = db.query(Cluster).filter(Cluster.id == request.cluster_id).first()
+@router.post("/{cluster_id}/name")
+def set_cluster_name(cluster_id: int, request: dict, db: Session = Depends(get_db)):
+    """设置聚类名称（角色名）"""
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
     
-    actor = db.query(Actor).filter(Actor.name == request.actor_name).first()
-    if not actor:
-        actor = Actor(name=request.actor_name, cluster_id=cluster.id)
-        db.add(actor)
-        db.flush()
-    else:
-        actor.cluster_id = cluster.id
+    cluster.name = request.get("name", "")
+    db.commit()
     
-    cluster.actor_name = request.actor_name
+    return {"success": True, "name": cluster.name}
+
+
+@router.get("/{cluster_id}/faces")
+def get_cluster_faces(cluster_id: int, db: Session = Depends(get_db)):
+    """获取聚类的所有人脸"""
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    if not cluster:
+        raise HTTPException(status_code=404, detail="Cluster not found")
     
-    faces = db.query(Face).filter(Face.cluster_id == cluster.id).all()
+    faces = db.query(Face).filter(Face.cluster_id == cluster_id).all()
+    
+    result = []
     for face in faces:
-        face.actor_name = request.actor_name
-        
-        frame = db.query(Frame).filter(Frame.id == face.frame_id).first()
-        if frame:
-            video_actor = db.query(VideoActor).filter(
-                VideoActor.video_id == frame.video_id,
-                VideoActor.actor_id == actor.id
-            ).first()
-            if not video_actor:
-                db.add(VideoActor(video_id=frame.video_id, actor_id=actor.id))
+        result.append({
+            "id": face.id,
+            "frame_id": face.frame_id,
+            "video_id": face.video_id,
+            "bounding_box": face.bounding_box,
+            "confidence": face.confidence
+        })
     
-    db.commit()
-    
-    _update_video_status(db)
-    
-    return {"success": True, "cluster_id": cluster.id, "actor_name": request.actor_name}
-
-
-def _update_video_status(db: Session):
-    videos = db.query(Video).filter(Video.status == VideoStatus.CLUSTERED).all()
-    for video in videos:
-        actors = db.query(VideoActor).filter(VideoActor.video_id == video.id).count()
-        if actors > 0:
-            from app.routers.tasks import _check_video_ready
-            _check_video_ready(video, db)
-    db.commit()
+    return {"cluster_id": cluster_id, "name": cluster.name, "faces": result}

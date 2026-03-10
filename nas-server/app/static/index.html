@@ -91,6 +91,7 @@
       <div class="logo"><h2>🎬 视频AI整理</h2></div>
       <div class="nav-item" :class="{ active: page === 'dashboard' }" @click="page = 'dashboard'">📊 仪表盘</div>
       <div class="nav-item" :class="{ active: page === 'videos' }" @click="page = 'videos'">🎬 视频管理</div>
+      <div class="nav-item" :class="{ active: page === 'clusters' }" @click="page = 'clusters'">👥 人脸聚类</div>
       <div class="nav-item" :class="{ active: page === 'review' }" @click="page = 'review'">✅ 命名审核</div>
       <div class="nav-item" :class="{ active: page === 'tasks' }" @click="page = 'tasks'">📋 任务监控</div>
       <div class="nav-item" :class="{ active: page === 'workers' }" @click="page = 'workers'">💻 Worker</div>
@@ -208,6 +209,53 @@
         </div>
       </div>
       
+      <!-- 人脸聚类管理 -->
+      <div v-show="page === 'clusters'">
+        <div class="page-header">
+          <h1 class="page-title">👥 人脸聚类管理</h1>
+          <div class="flex gap-2">
+            <el-select v-model="clusterVideoFilter" placeholder="选择视频" style="width:200px" @change="loadClusters">
+              <el-option label="全部视频" value=""></el-option>
+              <el-option v-for="v in videos" :key="v.id" :label="v.filename" :value="v.id"></el-option>
+            </el-select>
+            <button class="action-btn secondary" @click="loadClusters">🔄 刷新</button>
+          </div>
+        </div>
+        
+        <div v-if="clusters.length === 0" class="empty-state">
+          <div class="icon">👥</div>
+          <div>暂无聚类数据，请先完成视频处理</div>
+        </div>
+        
+        <div v-else>
+          <!-- 聚类列表 -->
+          <div class="content-card" v-for="cluster in clusters" :key="cluster.id">
+            <div class="card-header">
+              <div class="flex items-center gap-3">
+                <span class="card-title">📁 聚类 #{{ cluster.id }} - {{ cluster.name || '未命名' }}</span>
+                <el-input v-if="cluster.editing" v-model="cluster.name" placeholder="输入角色名" size="small" style="width:200px" @keyup.enter="saveClusterName(cluster)"></el-input>
+                <span v-else class="status-badge" style="background:rgba(102,126,234,0.2);color:#667eea">{{ cluster.face_count }} 张人脸</span>
+              </div>
+              <div class="flex gap-2">
+                <button v-if="!cluster.editing" class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="cluster.editing = true">✏️ 命名</button>
+                <button v-else class="action-btn primary" style="padding:6px 12px;font-size:12px" @click="saveClusterName(cluster)">✓ 保存</button>
+                <button class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="viewClusterFaces(cluster)">👁 查看</button>
+              </div>
+            </div>
+            
+            <!-- 预览人脸 -->
+            <div class="video-grid" style="grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">
+              <div v-for="face in cluster.preview_faces" :key="face.id" style="position:relative">
+                <img :src="`/api/frames/${face.frame_id}/image`" style="width:100px;height:100px;object-fit:cover;border-radius:8px">
+                <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;padding:2px 6px;border-radius:4px;font-size:10px">
+                  视频{{ face.video_id }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- 命名审核 -->
       <div v-show="page === 'review'">
         <div class="page-header">
@@ -237,18 +285,27 @@
       <div v-show="page === 'tasks'">
         <div class="page-header">
           <h1 class="page-title">任务监控</h1>
-          <button class="action-btn secondary" @click="loadTasks">🔄 刷新</button>
+          <div class="flex gap-2">
+            <span style="color:#71717a;font-size:14px">总计：{{ tasks.length }} | </span>
+            <span style="color:#fbbf24">待处理：{{ tasks.filter(t=>t.status==='pending').length }} | </span>
+            <span style="color:#3b82f6">进行中：{{ tasks.filter(t=>t.status==='running').length }} | </span>
+            <span style="color:#22c55e">完成：{{ tasks.filter(t=>t.status==='completed').length }} | </span>
+            <span style="color:#ef4444">失败：{{ tasks.filter(t=>t.status==='failed').length }}</span>
+            <button class="action-btn secondary" @click="loadTasks">🔄 刷新</button>
+          </div>
         </div>
         <div class="content-card">
           <table class="task-table">
-            <thead><tr><th>ID</th><th>类型</th><th>状态</th><th>视频ID</th><th>创建时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>ID</th><th>类型</th><th>状态</th><th>视频 ID</th><th>Worker</th><th>开始时间</th><th>耗时</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="t in tasks" :key="t.id">
                 <td>{{ t.id }}</td>
-                <td>{{ taskTypeText(t.task_type) }}</td>
+                <td><span class="status-badge" :class="t.task_type">{{ taskTypeText(t.task_type) }}</span></td>
                 <td><span class="status-badge" :class="t.status">{{ taskStatusText(t.status) }}</span></td>
                 <td>{{ t.video_id || '-' }}</td>
-                <td>{{ formatTime(t.created_at) }}</td>
+                <td>{{ t.worker_id || '-' }}</td>
+                <td>{{ formatTime(t.started_at) }}</td>
+                <td>{{ calcDuration(t) }}</td>
                 <td><button v-if="t.status==='failed'" class="action-btn secondary" style="padding:4px 12px;font-size:12px" @click="retryTask(t.id)">重试</button></td>
               </tr>
             </tbody>
@@ -279,7 +336,7 @@
     </main>
     
     <!-- 视频详情 -->
-    <el-dialog v-model="showDialog" :title="currentVideo?.filename" width="700px">
+    <el-dialog v-model="showDialog" :title="currentVideo?.filename" width="750px">
       <div v-if="currentVideo">
         <div class="flex gap-3 mb-3">
           <div><strong>时长:</strong> {{ currentVideo.duration ? (currentVideo.duration/60).toFixed(1)+'分钟' : '未知' }}</div>
@@ -287,7 +344,24 @@
         </div>
         <div class="mb-3"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</div>
         
-        <div class="flex justify-between items-center mb-3">
+        <!-- 处理进度 -->
+        <div class="content-card mt-2" style="padding:16px">
+          <div class="card-title" style="margin-bottom:12px">📊 处理进度</div>
+          <div v-if="videoTasks.length > 0">
+            <div v-for="taskGroup in groupedTasks" :key="taskGroup.type" class="mb-3">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <strong>{{ taskGroup.name }}</strong>
+                <span style="color:#71717a;font-size:13px">{{ taskGroup.completed }}/{{ taskGroup.total }} 完成</span>
+              </div>
+              <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+                <div :style="{width:(taskGroup.completed/taskGroup.total*100)+'%',background:getTaskColor(taskGroup.type),height:'100%',transition:'width 0.3s'}"></div>
+              </div>
+            </div>
+          </div>
+          <div v-else style="color:#71717a;text-align:center;padding:20px">暂无任务</div>
+        </div>
+        
+        <div class="flex justify-between items-center mb-3 mt-3">
           <strong>抽帧 ({{ frames.length }})</strong>
           <button class="action-btn danger" style="padding:6px 14px;font-size:12px" @click="reExtract" :disabled="reExtracting">
             {{ reExtracting ? '抽帧中...' : '🔄 重新抽帧' }}
@@ -299,6 +373,7 @@
             <img :src="`/api/frames/${f.id}/image`" class="video-thumbnail" style="height:120px">
             <div class="video-info" style="padding:8px">
               <div style="font-size:11px;color:#71717a">{{ f.timestamp?.toFixed(1) }}s</div>
+              <div style="font-size:11px;color:#a855f7" v-if="f.face_count">{{ f.face_count }} 张人脸</div>
             </div>
           </div>
         </div>
@@ -307,7 +382,7 @@
   </div>
 
   <script>
-    const { createApp, ref, reactive, onMounted, watch } = Vue;
+    const { createApp, ref, reactive, onMounted, watch, computed } = Vue;
     const { ElMessage } = ElementPlus;
     
     createApp({
@@ -333,12 +408,15 @@
         const reviewList = ref([]);
         const frames = ref([]);
         const currentVideo = ref(null);
+        const videoTasks = ref([]);
         
         // 选择状态
         const selectedDirs = ref([]);
         const selectedVideos = ref([]);
         const filter = ref('');
         const reviewNames = reactive({});
+        const clusterVideoFilter = ref('');
+        const clusters = ref([]);
         
         // 工具函数
         const statusText = (s) => ({
@@ -349,6 +427,11 @@
         const taskTypeText = (t) => ({ feature: '特征提取', cluster: '聚类', tag: '打标' })[t] || t;
         const taskStatusText = (s) => ({ pending: '待分配', assigned: '已分配', running: '运行中', completed: '完成', failed: '失败' })[s] || s;
         const formatTime = (t) => t ? new Date(t).toLocaleString() : '-';
+        const calcDuration = (t) => {
+          if (!t.started_at || !t.completed_at) return '-';
+          const duration = (new Date(t.completed_at) - new Date(t.started_at)) / 1000;
+          return duration < 60 ? duration.toFixed(1) + 's' : (duration/60).toFixed(1) + 'm';
+        };
         
         // API 调用
         const loadStats = async () => {
@@ -392,6 +475,28 @@
         
         const loadWorkers = async () => {
           try { workers.value = (await api.get('/api/workers')).data; } catch (e) {}
+        };
+        
+        const loadClusters = async () => {
+          try {
+            const url = clusterVideoFilter.value ? `/api/clusters?video_id=${clusterVideoFilter.value}` : '/api/clusters';
+            const res = await api.get(url);
+            clusters.value = res.data.map(c => ({ ...c, editing: false }));
+          } catch (e) { console.error('loadClusters error:', e); }
+        };
+        
+        const saveClusterName = async (cluster) => {
+          try {
+            await api.post(`/api/clusters/${cluster.id}/name`, { name: cluster.name });
+            ElMessage.success('命名已保存');
+            cluster.editing = false;
+            loadClusters();
+          } catch (e) { ElMessage.error('保存失败'); }
+        };
+        
+        const viewClusterFaces = (cluster) => {
+          // TODO: 打开弹窗显示该聚类的所有人脸
+          ElMessage.info(`查看聚类 #${cluster.id} 的 ${cluster.face_count} 张人脸`);
         };
         
         const loadReview = async () => {
@@ -451,14 +556,36 @@
         
         const openVideo = async (video) => {
           try {
-            const [vRes, fRes] = await Promise.all([
+            const [vRes, fRes, tRes] = await Promise.all([
               api.get(`/api/videos/${video.id}`),
-              api.get(`/api/videos/${video.id}/frames`)
+              api.get(`/api/videos/${video.id}/frames`),
+              api.get(`/api/videos/${video.id}/tasks`)
             ]);
             currentVideo.value = vRes.data;
             frames.value = fRes.data;
+            videoTasks.value = tRes.data;
             showDialog.value = true;
           } catch (e) { ElMessage.error('加载失败'); }
+        };
+        
+        const groupedTasks = computed(() => {
+          const groups = {
+            feature: { type: 'feature', name: '特征提取', total: 0, completed: 0 },
+            cluster: { type: 'cluster', name: '人脸聚类', total: 0, completed: 0 },
+            tag: { type: 'tag', name: '场景打标', total: 0, completed: 0 }
+          };
+          videoTasks.value.forEach(t => {
+            if (groups[t.task_type]) {
+              groups[t.task_type].total++;
+              if (t.status === 'completed') groups[t.task_type].completed++;
+            }
+          });
+          return Object.values(groups).filter(g => g.total > 0);
+        });
+        
+        const getTaskColor = (type) => {
+          const colors = { feature: '#a855f7', cluster: '#ec4899', tag: '#06b6d4' };
+          return colors[type] || '#667eea';
         };
         
         const reExtract = async () => {
@@ -503,6 +630,7 @@
         watch(page, (p) => {
           if (p === 'dashboard') loadStats();
           if (p === 'videos') { loadSystemDirs(); loadDirs(); loadVideos(); }
+          if (p === 'clusters') { loadVideos(); loadClusters(); }
           if (p === 'review') loadReview();
           if (p === 'tasks') loadTasks();
           if (p === 'workers') loadWorkers();
@@ -517,9 +645,11 @@
         
         return {
           page, loading, showDialog, showDirSelector, reExtracting, stats, systemDirs, dirs, videos, tasks, workers,
-          reviewList, frames, currentVideo, selectedDirs, selectedVideos, filter, reviewNames,
-          statusText, taskTypeText, taskStatusText, formatTime, refreshAll, loadSystemDirs, toggleDir, confirmDirSelection, scanDirs,
-          toggleVideo, startProcess, openVideo, reExtract, loadReview, adopt, loadTasks, retryTask, loadWorkers
+          reviewList, frames, currentVideo, videoTasks, selectedDirs, selectedVideos, filter, reviewNames,
+          clusterVideoFilter, clusters,
+          statusText, taskTypeText, taskStatusText, formatTime, calcDuration, refreshAll, loadSystemDirs, toggleDir, confirmDirSelection, scanDirs,
+          toggleVideo, startProcess, openVideo, reExtract, loadReview, adopt, loadTasks, retryTask, loadWorkers,
+          loadClusters, saveClusterName, viewClusterFaces, groupedTasks, getTaskColor
         };
       }
     }).use(ElementPlus).mount('#app');

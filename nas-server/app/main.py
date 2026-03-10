@@ -2,12 +2,36 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine, Base, get_db, init_pgvector
 from app.routers import dashboard, videos, tasks, clusters, frames, faces, workers
 from app.scheduler import setup_scheduler, shutdown_scheduler
 import os
+import time
+from sqlalchemy import text
 
-Base.metadata.create_all(bind=engine)
+# 等待数据库就绪并创建表
+def init_database():
+    max_retries = 30
+    for i in range(max_retries):
+        try:
+            # 尝试连接数据库
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print("Database connection successful")
+            
+            # 启用 pgvector 扩展
+            init_pgvector()
+            
+            # 创建所有表
+            Base.metadata.create_all(bind=engine)
+            print("Database tables created successfully")
+            return
+        except Exception as e:
+            print(f"Waiting for database... ({i+1}/{max_retries}): {e}")
+            time.sleep(2)
+    raise Exception("Failed to connect to database after multiple attempts")
+
+init_database()
 
 app = FastAPI(
     title="Video Organization System",
