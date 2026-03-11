@@ -59,7 +59,7 @@ def list_faces(
                 "id": face.id,
                 "video_id": face.video_id,
                 "frame_id": face.frame_id,
-                "embedding": face.embedding.tolist() if face.embedding else None,
+                "embedding": face.embedding.tolist() if face.embedding is not None else None,
                 "cluster_id": face.cluster_id
             }
             for face in faces

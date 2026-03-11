@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base, get_db, init_pgvector
-from app.routers import dashboard, videos, tasks, clusters, frames, faces, workers
+from app.routers import dashboard, videos, tasks, clusters, frames, faces, workers, actors, actor_match
 from app.scheduler import setup_scheduler, shutdown_scheduler
 import os
 import time
@@ -46,6 +46,8 @@ app.include_router(clusters.router)
 app.include_router(frames.router)
 app.include_router(faces.router)
 app.include_router(workers.router)
+app.include_router(actors.router)
+app.include_router(actor_match.router)
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):

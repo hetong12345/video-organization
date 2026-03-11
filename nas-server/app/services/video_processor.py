@@ -153,10 +153,10 @@ class FrameExtractor:
             if existing_frames > 0 and not force:
                 return []
             
-            # 删除旧数据（先删除 faces，再删除 frames，再删除 tasks）
+            # 删除旧数据（先删除 tasks，再删除 faces，最后删除 frames）
+            db.query(Task).filter(Task.video_id == video_id).delete()
             db.query(Face).filter(Face.video_id == video_id).delete()
             db.query(Frame).filter(Frame.video_id == video_id).delete()
-            db.query(Task).filter(Task.video_id == video_id).delete()
             
             video.status = VideoStatus.PROCESSING
             db.commit()

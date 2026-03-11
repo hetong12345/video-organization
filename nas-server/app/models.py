@@ -95,6 +95,7 @@ class Cluster(Base):
     actor_name = Column(String(100), nullable=True)
     name = Column(String(100), nullable=True)
     representative_face_id = Column(Integer, ForeignKey("faces.id"), nullable=True)
+    representative_embedding = Column(Vector(512), nullable=True)  # 聚类的平均特征
     face_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -3,148 +3,80 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>视频AI整理系统</title>
+  <title>视频 AI 整理系统</title>
   <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
   <script src="https://cdn.jsdelivr.net/npm/element-plus/dist/index.full.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Noto Sans SC', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; color: #e4e4e7; }
-    #app { display: flex; min-height: 100vh; }
-    .sidebar { width: 220px; background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border-right: 1px solid rgba(255,255,255,0.08); padding: 24px 0; position: fixed; height: 100vh; z-index: 100; }
-    .logo { padding: 0 24px 32px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 24px; }
-    .logo h2 { font-size: 18px; font-weight: 600; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .nav-item { padding: 14px 24px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: all 0.3s ease; color: #a1a1aa; font-size: 14px; border-left: 3px solid transparent; }
-    .nav-item:hover { background: rgba(255,255,255,0.04); color: #e4e4e7; }
-    .nav-item.active { background: linear-gradient(90deg, rgba(102,126,234,0.15) 0%, transparent 100%); color: #fff; border-left-color: #667eea; }
-    .main-content { margin-left: 220px; flex: 1; padding: 32px; }
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
-    .page-title { font-size: 28px; font-weight: 600; color: #fff; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; text-align: center; }
-    .stat-value { font-size: 36px; font-weight: 700; color: #fff; margin-bottom: 4px; }
-    .stat-label { font-size: 12px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; }
-    .content-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .card-title { font-size: 16px; font-weight: 600; color: #fff; }
-    .action-btn { padding: 10px 20px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.3s ease; }
-    .action-btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
-    .action-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
-    .action-btn.primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-    .action-btn.secondary { background: rgba(255,255,255,0.08); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.1); }
-    .action-btn.secondary:hover { background: rgba(255,255,255,0.12); color: #fff; }
-    .action-btn.danger { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
-    .action-btn.danger:hover { background: rgba(239,68,68,0.3); }
-    .dir-list { display: flex; flex-direction: column; gap: 8px; }
-    .dir-item { display: flex; align-items: center; padding: 12px 16px; background: rgba(255,255,255,0.02); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
-    .dir-item:hover { background: rgba(102,126,234,0.1); }
-    .dir-item.selected { background: rgba(102,126,234,0.2); border-color: #667eea; }
-    .dir-item .path { flex: 1; color: #fff; font-size: 14px; margin-left: 12px; }
-    .dir-item .count { color: #71717a; font-size: 13px; }
-    .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-    .video-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; overflow: hidden; transition: all 0.3s; }
-    .video-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.3); border-color: rgba(102,126,234,0.3); }
-    .video-thumbnail { width: 100%; height: 140px; object-fit: cover; background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%); display: block; }
-    .video-info { padding: 16px; }
-    .video-name { font-size: 14px; font-weight: 500; color: #fff; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .video-meta { display: flex; justify-content: space-between; align-items: center; }
-    .video-duration { color: #71717a; font-size: 12px; }
-    .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
-    .status-badge.pending { background: rgba(251,191,36,0.15); color: #fbbf24; }
-    .status-badge.processing { background: rgba(59,130,246,0.15); color: #3b82f6; }
-    .status-badge.featured { background: rgba(168,85,247,0.15); color: #a855f7; }
-    .status-badge.clustered { background: rgba(236,72,153,0.15); color: #ec4899; }
-    .status-badge.tagged { background: rgba(6,182,212,0.15); color: #06b6d4; }
-    .status-badge.ready { background: rgba(34,197,94,0.15); color: #22c55e; }
-    .status-badge.completed { background: rgba(34,197,94,0.3); color: #4ade80; }
-    .status-badge.failed { background: rgba(239,68,68,0.15); color: #ef4444; }
-    .task-table { width: 100%; border-collapse: collapse; }
-    .task-table th, .task-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .task-table th { color: #71717a; font-weight: 500; font-size: 12px; text-transform: uppercase; }
-    .worker-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 20px; }
-    .worker-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #71717a; }
-    .status-dot.online { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.5); }
-    .empty-state { text-align: center; padding: 60px 20px; color: #71717a; }
-    .empty-state .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
-    .flex { display: flex; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .gap-2 { gap: 8px; }
-    .gap-3 { gap: 12px; }
-    .mt-2 { margin-top: 8px; }
-    .mt-3 { margin-top: 12px; }
-    .mb-3 { margin-bottom: 12px; }
-    :deep(.el-checkbox) { --el-checkbox-checked-bg-color: #667eea; }
-    :deep(.el-dialog) { background: #1e1e2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; }
-    :deep(.el-dialog__title) { color: #fff; }
-    :deep(.el-input__wrapper) { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); box-shadow: none; }
-    :deep(.el-input__inner) { color: #fff; }
-    :deep(.el-select__wrapper) { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); box-shadow: none; }
-  </style>
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <div id="app">
+    <!-- 侧边栏 -->
     <aside class="sidebar">
-      <div class="logo"><h2>🎬 视频AI整理</h2></div>
-      <div class="nav-item" :class="{ active: page === 'dashboard' }" @click="page = 'dashboard'">📊 仪表盘</div>
-      <div class="nav-item" :class="{ active: page === 'videos' }" @click="page = 'videos'">🎬 视频管理</div>
-      <div class="nav-item" :class="{ active: page === 'clusters' }" @click="page = 'clusters'">👥 人脸聚类</div>
-      <div class="nav-item" :class="{ active: page === 'review' }" @click="page = 'review'">✅ 命名审核</div>
-      <div class="nav-item" :class="{ active: page === 'tasks' }" @click="page = 'tasks'">📋 任务监控</div>
-      <div class="nav-item" :class="{ active: page === 'workers' }" @click="page = 'workers'">💻 Worker</div>
+      <div class="logo">
+        <h2>🎬 视频 AI 整理</h2>
+      </div>
+      <nav class="nav-menu">
+        <div class="nav-item" :class="{ active: page === 'dashboard' }" @click="page = 'dashboard'">📊 仪表盘</div>
+        <div class="nav-item" :class="{ active: page === 'videos' }" @click="page = 'videos'">🎬 视频管理</div>
+        <div class="nav-item" :class="{ active: page === 'clusters' }" @click="page = 'clusters'">👥 人脸聚类</div>
+        <div class="nav-item" :class="{ active: page === 'review' }" @click="page = 'review'">✅ 命名审核</div>
+        <div class="nav-item" :class="{ active: page === 'tasks' }" @click="page = 'tasks'">📋 任务监控</div>
+        <div class="nav-item" :class="{ active: page === 'workers' }" @click="page = 'workers'">💻 Worker</div>
+      </nav>
     </aside>
-    
+
+    <!-- 主内容区 -->
     <main class="main-content">
       <!-- 仪表盘 -->
       <div v-show="page === 'dashboard'">
-        <div class="page-header"><h1 class="page-title">仪表盘</h1></div>
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-value" style="color:#fff">{{ stats.total_videos }}</div><div class="stat-label">总视频</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#fbbf24">{{ stats.pending_videos }}</div><div class="stat-label">待处理</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#3b82f6">{{ stats.processing_videos }}</div><div class="stat-label">处理中</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#22c55e">{{ stats.ready_videos }}</div><div class="stat-label">待采纳</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#a855f7">{{ stats.completed_videos }}</div><div class="stat-label">已完成</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#06b6d4">{{ stats.online_workers }}</div><div class="stat-label">在线Worker</div></div>
+        <div class="page-header">
+          <h1 class="page-title">📊 仪表盘</h1>
+          <button class="action-btn secondary" @click="refreshAll">🔄 刷新</button>
         </div>
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-value" style="color:#fbbf24">{{ stats.pending_tasks }}</div><div class="stat-label">待处理任务</div></div>
-          <div class="stat-card"><div class="stat-value" style="color:#3b82f6">{{ stats.running_tasks }}</div><div class="stat-label">进行中任务</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.total_videos }}</div><div class="stat-label">总视频</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.pending_videos }}</div><div class="stat-label">待处理</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.processing_videos }}</div><div class="stat-label">处理中</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.ready_videos }}</div><div class="stat-label">待采纳</div></div>
+          <div class="stat-card"><div class="stat-value">{{ stats.completed_videos }}</div><div class="stat-label">已完成</div></div>
+        </div>
+        <div class="content-card">
+          <div class="card-header"><span class="card-title">📋 任务统计</span></div>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value">{{ stats.pending_tasks }}</div><div class="stat-label">待分配</div></div>
+            <div class="stat-card"><div class="stat-value">{{ stats.running_tasks }}</div><div class="stat-label">进行中</div></div>
+            <div class="stat-card"><div class="stat-value">{{ stats.online_workers }}</div><div class="stat-label">在线 Worker</div></div>
+          </div>
         </div>
       </div>
       
       <!-- 视频管理 -->
       <div v-show="page === 'videos'">
         <div class="page-header">
-          <h1 class="page-title">视频管理</h1>
+          <h1 class="page-title">🎬 视频管理</h1>
           <div class="flex gap-2">
-            <button class="action-btn secondary" @click="refreshAll">🔄 刷新</button>
-            <button class="action-btn primary" @click="showDirSelector = true">📁 选择目录</button>
-            <button class="action-btn primary" :disabled="selectedDirs.length === 0" @click="scanDirs">▶ 扫描选中 ({{ selectedDirs.length }})</button>
+            <button class="action-btn primary" @click="showDirSelector = true">➕ 添加目录</button>
+            <button class="action-btn secondary" @click="refreshVideos">🔄 刷新</button>
           </div>
         </div>
         
-        <!-- 目录选择器弹窗 -->
-        <el-dialog v-model="showDirSelector" title="选择扫描目录" width="600px">
-          <div class="content-card" style="margin:0;max-height:400px;overflow-y:auto">
-            <div class="card-header">
-              <span class="card-title">📂 系统目录</span>
-              <span style="color:#71717a;font-size:13px">点击选择要扫描的目录</span>
-            </div>
-            <div v-if="systemDirs.length === 0" class="empty-state" style="padding:20px">
-              <div>加载中...</div>
-            </div>
-            <div v-else class="dir-list">
-              <div v-for="d in systemDirs" :key="d.path" class="dir-item" :class="{ selected: selectedDirs.includes(d.path) }" @click="toggleDir(d.path)">
-                <el-checkbox :model-value="selectedDirs.includes(d.path)" @click.stop></el-checkbox>
-                <div style="flex:1;margin-left:12px">
-                  <div style="color:#fff;font-weight:500">{{ d.name }}</div>
-                  <div style="color:#71717a;font-size:12px">{{ d.path }}</div>
-                </div>
-                <div style="color:#71717a;font-size:13px">{{ d.video_count }} 个视频</div>
+        <!-- 添加目录弹窗 -->
+        <el-dialog v-model="showDirSelector" title="添加视频目录" width="600px">
+          <div v-if="systemDirs.length === 0" class="empty-state">
+            <div class="icon">📁</div>
+            <div>加载中...</div>
+          </div>
+          <div v-else class="dir-list">
+            <div v-for="dir in systemDirs" :key="dir.path" class="dir-item" :class="{ selected: selectedDirs.includes(dir.path) }" @click="toggleDir(dir.path)">
+              <div style="font-size:20px;margin-right:12px">📁</div>
+              <div style="flex:1">
+                <div style="color:#fff;font-size:14px">{{ dir.name }}</div>
+                <div style="color:#71717a;font-size:12px;margin-top:4px">{{ dir.path }}</div>
               </div>
+              <span class="status-badge" :class="dir.video_count > 0 ? 'completed' : 'pending'">{{ dir.video_count }} 个视频</span>
             </div>
           </div>
           <template #footer>
@@ -153,24 +85,38 @@
           </template>
         </el-dialog>
         
-        <!-- 已选择的目录 -->
-        <div class="content-card" v-if="selectedDirs.length > 0">
+        <div class="content-card">
           <div class="card-header">
-            <span class="card-title">📁 已选择目录 ({{ selectedDirs.length }})</span>
-            <button class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="selectedDirs = []">清空</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+              <span class="card-title">📁 已添加目录 ({{ dirs.length }})</span>
+              <button class="action-btn primary" style="padding:6px 12px;font-size:12px" @click="scanDirs">🔄 扫描新视频</button>
+            </div>
           </div>
-          <div class="dir-list">
-            <div v-for="path in selectedDirs" :key="path" class="dir-item">
-              <span style="color:#fff">{{ path }}</span>
+          <div v-if="dirs.length === 0" class="empty-state"><div class="icon">📁</div><div>暂无已添加目录，请点击"添加目录"按钮</div></div>
+          <div v-else class="dir-list">
+            <div v-for="dir in dirs" :key="dir.path" class="dir-item">
+              <div style="font-size:20px;margin-right:12px">📁</div>
+              <div style="flex:1">
+                <div style="color:#fff;font-size:14px">{{ dir.path }}</div>
+                <div style="color:#71717a;font-size:12px;margin-top:4px">{{ dir.video_count }} 个视频</div>
+              </div>
             </div>
           </div>
         </div>
         
-        <!-- 视频列表 -->
-        <div class="content-card">
+        <div class="content-card mt-4">
           <div class="card-header">
             <span class="card-title">🎬 视频列表 ({{ videos.length }})</span>
             <div class="flex gap-2 items-center">
+              <el-input v-model="videoSearch" placeholder="搜索视频..." style="width:200px" size="small" clearable></el-input>
+              <el-select v-model="sortBy" placeholder="排序" style="width:140px" size="small" @change="sortVideos">
+                <el-option label="按时间 (新→旧)" value="created_desc"></el-option>
+                <el-option label="按时间 (旧→新)" value="created_asc"></el-option>
+                <el-option label="按文件名 (A-Z)" value="name_asc"></el-option>
+                <el-option label="按文件名 (Z-A)" value="name_desc"></el-option>
+                <el-option label="按时长 (长→短)" value="duration_desc"></el-option>
+                <el-option label="按时长 (短→长)" value="duration_asc"></el-option>
+              </el-select>
               <el-select v-model="filter" placeholder="筛选状态" style="width:140px" size="small">
                 <el-option label="全部" value=""></el-option>
                 <el-option label="待处理" value="pending"></el-option>
@@ -181,17 +127,11 @@
                 <el-option label="待采纳" value="ready"></el-option>
                 <el-option label="已完成" value="completed"></el-option>
               </el-select>
-              <button class="action-btn primary" :disabled="selectedVideos.length === 0" @click="startProcess" style="padding:8px 16px">▶ 处理 ({{ selectedVideos.length }})</button>
             </div>
           </div>
-          
-          <div v-if="loading" class="empty-state">加载中...</div>
-          <div v-else-if="videos.length === 0" class="empty-state">
-            <div class="icon">📂</div>
-            <div>暂无视频，请先扫描目录</div>
-          </div>
+          <div v-if="videos.length === 0" class="empty-state"><div class="icon">🎬</div><div>暂无视频</div></div>
           <div v-else class="video-grid">
-            <div v-for="v in videos" :key="v.id" class="video-card">
+            <div v-for="v in filteredVideos" :key="v.id" class="video-card">
               <img v-if="v.thumbnail_url" :src="v.thumbnail_url" class="video-thumbnail" @click="openVideo(v)">
               <div v-else class="video-thumbnail flex items-center justify-center" style="font-size:40px;color:#3f3f46;cursor:pointer" @click="openVideo(v)">🎬</div>
               <div class="video-info">
@@ -200,55 +140,155 @@
                   <span class="video-duration">{{ v.duration ? (v.duration/60).toFixed(1)+'分钟' : '-' }}</span>
                   <el-checkbox :model-value="selectedVideos.includes(v.id)" @change="toggleVideo(v.id)"></el-checkbox>
                 </div>
-                <div class="mt-2">
-                  <span class="status-badge" :class="v.status">{{ statusText(v.status) }}</span>
-                </div>
+                <div class="mt-2"><span class="status-badge" :class="v.status">{{ statusText(v.status) }}</span></div>
               </div>
             </div>
           </div>
         </div>
       </div>
       
-      <!-- 人脸聚类管理 -->
+      <!-- 人脸聚类（重点重构） -->
       <div v-show="page === 'clusters'">
         <div class="page-header">
           <h1 class="page-title">👥 人脸聚类管理</h1>
           <div class="flex gap-2">
-            <el-select v-model="clusterVideoFilter" placeholder="选择视频" style="width:200px" @change="loadClusters">
-              <el-option label="全部视频" value=""></el-option>
+            <el-select v-model="clusterVideoFilter" placeholder="筛选视频" style="width:200px" size="small" clearable @change="loadClusters">
               <el-option v-for="v in videos" :key="v.id" :label="v.filename" :value="v.id"></el-option>
             </el-select>
             <button class="action-btn secondary" @click="loadClusters">🔄 刷新</button>
           </div>
         </div>
         
-        <div v-if="clusters.length === 0" class="empty-state">
-          <div class="icon">👥</div>
-          <div>暂无聚类数据，请先完成视频处理</div>
-        </div>
-        
-        <div v-else>
-          <!-- 聚类列表 -->
-          <div class="content-card" v-for="cluster in clusters" :key="cluster.id">
-            <div class="card-header">
-              <div class="flex items-center gap-3">
-                <span class="card-title">📁 聚类 #{{ cluster.id }} - {{ cluster.name || '未命名' }}</span>
-                <el-input v-if="cluster.editing" v-model="cluster.name" placeholder="输入角色名" size="small" style="width:200px" @keyup.enter="saveClusterName(cluster)"></el-input>
-                <span v-else class="status-badge" style="background:rgba(102,126,234,0.2);color:#667eea">{{ cluster.face_count }} 张人脸</span>
-              </div>
-              <div class="flex gap-2">
-                <button v-if="!cluster.editing" class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="cluster.editing = true">✏️ 命名</button>
-                <button v-else class="action-btn primary" style="padding:6px 12px;font-size:12px" @click="saveClusterName(cluster)">✓ 保存</button>
-                <button class="action-btn secondary" style="padding:6px 12px;font-size:12px" @click="viewClusterFaces(cluster)">👁 查看</button>
+        <!-- 相似聚类推荐弹窗 -->
+        <el-dialog v-model="showSimilarDialog" title="🔍 相似聚类推荐" width="800px">
+          <div v-if="currentCluster">
+            <div class="mb-3">
+              <div style="color:#fff;font-size:16px;margin-bottom:8px">当前聚类</div>
+              <div style="color:#71717a;font-size:14px">
+                视频 ID: {{ currentCluster.video_id }} | 
+                名称：{{ currentCluster.name || '未命名' }} | 
+                人脸数：{{ currentCluster.face_count }}
               </div>
             </div>
             
-            <!-- 预览人脸 -->
-            <div class="video-grid" style="grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px">
-              <div v-for="face in cluster.preview_faces" :key="face.id" style="position:relative">
-                <img :src="`/api/frames/${face.frame_id}/image`" style="width:100px;height:100px;object-fit:cover;border-radius:8px">
-                <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;padding:2px 6px;border-radius:4px;font-size:10px">
-                  视频{{ face.video_id }}
+            <div v-if="similarClusters.length === 0" class="empty-state">
+              <div class="icon">🔍</div>
+              <div>未找到相似的聚类</div>
+            </div>
+            
+            <div v-else class="video-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+              <div v-for="similar in similarClusters" :key="similar.cluster_id" class="video-card" style="border:2px solid #3b82f6">
+                <div class="video-info">
+                  <div style="font-size:14px;color:#fff;margin-bottom:8px">
+                    视频 {{ similar.video_id }} - {{ similar.name || '未命名' }}
+                  </div>
+                  <div style="font-size:12px;color:#71717a;margin-bottom:4px">
+                    人脸数：{{ similar.face_count }}
+                  </div>
+                  <div style="font-size:12px;color:#71717a;margin-bottom:8px" v-if="similar.actor_name">
+                    演员名：{{ similar.actor_name }}
+                  </div>
+                  <div style="font-size:20px;font-weight:700;color:#10b981;margin-bottom:12px">
+                    相似度：{{ (similar.similarity * 100).toFixed(1) }}%
+                  </div>
+                  <div class="flex gap-2">
+                    <button class="action-btn primary" style="flex:1;padding:8px;font-size:12px" @click="mergeClusters(similar.cluster_id, currentCluster.id)">
+                      合并到当前
+                    </button>
+                    <button class="action-btn secondary" style="padding:8px;font-size:12px" @click="showNameDialog(currentCluster.id, currentCluster.name)">
+                      命名
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <template #footer>
+            <button class="action-btn secondary" @click="showSimilarDialog = false">关闭</button>
+          </template>
+        </el-dialog>
+        
+        <!-- 聚类详情弹窗 -->
+        <el-dialog v-model="showFaceDialog" title="👥 聚类人脸详情" width="900px">
+          <div v-if="currentCluster">
+            <div class="mb-4">
+              <div style="color:#fff;font-size:16px;margin-bottom:8px">聚类信息</div>
+              <div style="color:#71717a;font-size:14px">
+                视频：{{ videos.find(v => v.id === currentCluster.video_id)?.filename || '未知' }} | 
+                名称：{{ currentCluster.name || '未命名' }} | 
+                人脸数：{{ currentCluster.face_count }}
+              </div>
+            </div>
+            
+            <div v-if="clusterFaces.length === 0" class="empty-state">
+              <div class="icon">👥</div>
+              <div>加载中...</div>
+            </div>
+            
+            <div v-else class="video-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+              <div v-for="face in clusterFaces" :key="face.id" class="video-card">
+                <img :src="`/api/frames/${face.frame_id}/image`" 
+                     style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px"
+                     @click="viewFrameDetail(face)">
+                <div style="font-size:11px;color:#71717a;text-align:center;margin-top:4px">
+                  Frame #{{ face.frame_index }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <template #footer>
+            <button class="action-btn secondary" @click="showFaceDialog = false">关闭</button>
+          </template>
+        </el-dialog>
+        
+        <div v-if="clusters.length === 0" class="empty-state">
+          <div class="icon">👥</div>
+          <div>暂无聚类数据，请先完成视频的特征提取和聚类</div>
+        </div>
+        
+        <div v-else class="content-card">
+          <div class="card-header">
+            <span class="card-title">👥 聚类列表 ({{ clusters.length }})</span>
+          </div>
+          
+          <!-- 按视频分组显示 -->
+          <div v-for="group in groupedClusters" :key="group.video_id" class="mb-6">
+            <div class="flex items-center gap-2 mb-3" style="border-bottom:2px solid #3f3f46;padding-bottom:8px">
+              <h3 style="font-size:16px;color:#fff;margin:0">视频 {{ group.video_id }}</h3>
+              <span style="font-size:12px;color:#71717a">{{ group.filename }}</span>
+              <span style="font-size:12px;color:#3b82f6">{{ group.clusters.length }} 个聚类</span>
+            </div>
+            
+            <div class="video-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+              <div v-for="cluster in group.clusters" :key="cluster.id" class="video-card" @click="viewClusterDetail(cluster)" style="cursor:pointer">
+                <div class="video-info">
+                  <div class="flex justify-between items-center mb-2">
+                    <h4 style="font-size:14px;color:#fff;margin:0">{{ cluster.name || '未命名聚类' }}</h4>
+                    <span style="font-size:11px;color:#71717a">{{ cluster.face_count }}张人脸</span>
+                  </div>
+                  
+                  <div class="preview-faces" v-if="cluster.preview_faces && cluster.preview_faces.length > 0">
+                    <div class="video-grid" style="grid-template-columns:repeat(2,1fr);gap:4px">
+                      <img v-for="face in cluster.preview_faces.slice(0,4)" :key="face.id" 
+                           :src="`/api/frames/${face.frame_id}/image`" 
+                           style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px">
+                    </div>
+                  </div>
+                  
+                  <div class="flex gap-2 mt-3">
+                    <button class="action-btn primary" style="flex:1;padding:6px;font-size:12px" @click.stop="findSimilarClusters(cluster)">
+                      🔍 找相似
+                    </button>
+                    <button class="action-btn secondary" style="padding:6px;font-size:12px" @click.stop="showNameDialog(cluster.id, cluster.name)">
+                      ✏️ 命名
+                    </button>
+                  </div>
+                  
+                  <div class="mt-2" v-if="cluster.actor_name">
+                    <span style="font-size:11px;color:#10b981;background:rgba(16,185,129,0.1);padding:2px 6px;border-radius:4px">
+                      👤 {{ cluster.actor_name }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -259,22 +299,24 @@
       <!-- 命名审核 -->
       <div v-show="page === 'review'">
         <div class="page-header">
-          <h1 class="page-title">命名审核</h1>
-          <button class="action-btn secondary" @click="loadReview">🔄 刷新</button>
+          <h1 class="page-title">✅ 命名审核</h1>
+          <div class="flex gap-2">
+            <button class="action-btn primary" @click="batchAdopt" :disabled="selectedReviews.length === 0">✓ 批量采纳 ({{ selectedReviews.length }})</button>
+            <button class="action-btn secondary" @click="loadReview">🔄 刷新</button>
+          </div>
         </div>
         <div class="content-card">
-          <div v-if="reviewList.length === 0" class="empty-state">
-            <div class="icon">✅</div>
-            <div>暂无待审核视频</div>
-          </div>
+          <div v-if="reviewList.length === 0" class="empty-state"><div class="icon">✅</div><div>暂无待审核视频</div></div>
           <div v-else class="video-grid">
-            <div v-for="v in reviewList" :key="v.id" class="video-card">
+            <div v-for="v in reviewList" :key="v.id" class="video-card" :class="{ selected: selectedReviews.includes(v.id) }" @click="toggleReviewSelection(v.id)">
               <img v-if="v.thumbnail_url" :src="v.thumbnail_url" class="video-thumbnail">
               <div v-else class="video-thumbnail flex items-center justify-center" style="font-size:40px">🎬</div>
               <div class="video-info">
                 <div class="video-name">{{ v.filename }}</div>
-                <el-input v-model="reviewNames[v.id]" placeholder="输入命名" size="small" class="mt-2"></el-input>
-                <button class="action-btn primary mt-2" style="width:100%;padding:8px" @click="adopt(v.id)">✓ 采纳</button>
+                <el-input v-model="reviewNames[v.id]" placeholder="输入命名" size="small" class="mt-2" @click.stop></el-input>
+                <div class="flex gap-2 mt-2">
+                  <button class="action-btn primary" style="flex:1;padding:8px" @click.stop="adopt(v.id)">✓ 采纳</button>
+                </div>
               </div>
             </div>
           </div>
@@ -284,421 +326,54 @@
       <!-- 任务监控 -->
       <div v-show="page === 'tasks'">
         <div class="page-header">
-          <h1 class="page-title">任务监控</h1>
-          <div class="flex gap-2">
-            <span style="color:#71717a;font-size:14px">总计：{{ tasks.length }} | </span>
-            <span style="color:#fbbf24">待处理：{{ tasks.filter(t=>t.status==='pending').length }} | </span>
-            <span style="color:#3b82f6">进行中：{{ tasks.filter(t=>t.status==='running').length }} | </span>
-            <span style="color:#22c55e">完成：{{ tasks.filter(t=>t.status==='completed').length }} | </span>
-            <span style="color:#ef4444">失败：{{ tasks.filter(t=>t.status==='failed').length }}</span>
-            <button class="action-btn secondary" @click="loadTasks">🔄 刷新</button>
-          </div>
+          <h1 class="page-title">📋 任务监控</h1>
+          <button class="action-btn secondary" @click="loadTasks">🔄 刷新</button>
         </div>
         <div class="content-card">
-          <table class="task-table">
-            <thead><tr><th>ID</th><th>类型</th><th>状态</th><th>视频 ID</th><th>Worker</th><th>开始时间</th><th>耗时</th><th>操作</th></tr></thead>
-            <tbody>
-              <tr v-for="t in tasks" :key="t.id">
-                <td>{{ t.id }}</td>
-                <td><span class="status-badge" :class="t.task_type">{{ taskTypeText(t.task_type) }}</span></td>
-                <td><span class="status-badge" :class="t.status">{{ taskStatusText(t.status) }}</span></td>
-                <td>{{ t.video_id || '-' }}</td>
-                <td>{{ t.worker_id || '-' }}</td>
-                <td>{{ formatTime(t.started_at) }}</td>
-                <td>{{ calcDuration(t) }}</td>
-                <td><button v-if="t.status==='failed'" class="action-btn secondary" style="padding:4px 12px;font-size:12px" @click="retryTask(t.id)">重试</button></td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="card-header"><span class="card-title">📊 任务状态</span></div>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value">{{ tasks.filter(t => t.status === 'pending').length }}</div><div class="stat-label">待分配</div></div>
+            <div class="stat-card"><div class="stat-value">{{ tasks.filter(t => t.status === 'running').length }}</div><div class="stat-label">进行中</div></div>
+            <div class="stat-card"><div class="stat-value">{{ tasks.filter(t => t.status === 'completed').length }}</div><div class="stat-label">已完成</div></div>
+            <div class="stat-card"><div class="stat-value">{{ tasks.filter(t => t.status === 'failed').length }}</div><div class="stat-label">失败</div></div>
+          </div>
+          <div class="card-header mt-3"><span class="card-title">📝 任务列表</span></div>
+          <div class="dir-list">
+            <div v-for="task in groupedTasks" :key="task.id" class="dir-item">
+              <div style="flex:1">
+                <div style="color:#fff;font-size:14px">任务 #{{ task.id }} - {{ taskTypeText(task.task_type) }}</div>
+                <div style="color:#71717a;font-size:12px;margin-top:4px">视频 {{ task.video_id }} | {{ formatTime(task.created_at) }}</div>
+              </div>
+              <span class="status-badge" :class="task.status">{{ taskStatusText(task.status) }}</span>
+              <button v-if="task.status === 'failed'" class="action-btn secondary" style="margin-left:12px;padding:6px 12px;font-size:12px" @click="retryTask(task.id)">🔄 重试</button>
+            </div>
+          </div>
         </div>
       </div>
       
       <!-- Worker -->
       <div v-show="page === 'workers'">
         <div class="page-header">
-          <h1 class="page-title">Worker状态</h1>
+          <h1 class="page-title">💻 Worker 状态</h1>
           <button class="action-btn secondary" @click="loadWorkers">🔄 刷新</button>
         </div>
-        <div class="stats-grid">
-          <div v-for="w in workers" :key="w.id" class="worker-card">
-            <div class="worker-header">
-              <span class="status-dot" :class="{ online: w.is_online }"></span>
-              <strong>{{ w.id }}</strong>
-              <span style="color:#71717a;margin-left:auto">{{ w.is_online ? '在线' : '离线' }}</span>
-            </div>
-            <div style="color:#71717a;font-size:13px">
-              <div>状态: {{ w.status }}</div>
-              <div>心跳: {{ formatTime(w.last_heartbeat) }}</div>
+        <div class="content-card">
+          <div v-if="workers.length === 0" class="empty-state"><div class="icon">💻</div><div>暂无 Worker</div></div>
+          <div v-else class="dir-list">
+            <div v-for="w in workers" :key="w.worker_id" class="dir-item">
+              <div style="font-size:24px;margin-right:12px">{{ w.status === 'idle' ? '🟢' : '🔵' }}</div>
+              <div style="flex:1">
+                <div style="color:#fff;font-size:14px">{{ w.worker_id }}</div>
+                <div style="color:#71717a;font-size:12px">最后心跳：{{ formatTime(w.last_heartbeat) }}</div>
+              </div>
+              <span class="status-badge" :class="w.status">{{ w.status === 'idle' ? '空闲' : '工作中' }}</span>
             </div>
           </div>
         </div>
       </div>
     </main>
-    
-    <!-- 视频详情 -->
-    <el-dialog v-model="showDialog" :title="currentVideo?.filename" width="750px">
-      <div v-if="currentVideo">
-        <div class="flex gap-3 mb-3">
-          <div><strong>时长:</strong> {{ currentVideo.duration ? (currentVideo.duration/60).toFixed(1)+'分钟' : '未知' }}</div>
-          <div><strong>状态:</strong> <span class="status-badge" :class="currentVideo.status">{{ statusText(currentVideo.status) }}</span></div>
-        </div>
-        <div class="mb-3"><strong>推荐命名:</strong> {{ currentVideo.recommended_name || '未生成' }}</div>
-        
-        <!-- 处理进度 -->
-        <div class="content-card mt-2" style="padding:16px">
-          <div class="card-title" style="margin-bottom:12px">📊 处理进度</div>
-          <div v-if="videoTasks.length > 0">
-            <div v-for="taskGroup in groupedTasks" :key="taskGroup.type" class="mb-3">
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                <strong>{{ taskGroup.name }}</strong>
-                <span style="color:#71717a;font-size:13px">{{ taskGroup.completed }}/{{ taskGroup.total }} 完成</span>
-              </div>
-              <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
-                <div :style="{width:(taskGroup.completed/taskGroup.total*100)+'%',background:getTaskColor(taskGroup.type),height:'100%',transition:'width 0.3s'}"></div>
-              </div>
-            </div>
-          </div>
-          <div v-else style="color:#71717a;text-align:center;padding:20px">暂无任务</div>
-        </div>
-        
-        <div class="flex justify-between items-center mb-3 mt-3">
-          <strong>抽帧 ({{ frames.length }}) - 共检测到 {{ totalFaces }} 张人脸</strong>
-          <button class="action-btn danger" style="padding:6px 14px;font-size:12px" @click="reExtract" :disabled="reExtracting">
-            {{ reExtracting ? '抽帧中...' : '🔄 重新抽帧' }}
-          </button>
-        </div>
-        
-        <div class="video-grid">
-          <div v-for="f in frames" :key="f.id" class="video-card" style="cursor:default">
-            <img :src="`/api/frames/${f.id}/image`" class="video-thumbnail" style="height:120px">
-            <div class="video-info" style="padding:8px">
-              <div style="font-size:11px;color:#71717a">{{ f.timestamp?.toFixed(1) }}s</div>
-              <div style="font-size:11px;color:#a855f7" v-if="f.face_count">{{ f.face_count }} 张人脸</div>
-              <button v-if="f.face_count > 0" class="action-btn secondary mt-2" style="padding:4px 8px;font-size:11px;width:100%" @click="viewFrameFaces(f)">👁 查看人脸</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-dialog>
-    
-    <!-- 人脸详情弹窗 -->
-    <el-dialog v-model="showFaceDialog" title="人脸详情" width="800px">
-      <div v-if="currentFrame">
-        <div class="mb-3"><strong>帧时间:</strong> {{ currentFrame.timestamp?.toFixed(1) }}s</div>
-        <div class="mb-3"><strong>人脸数量:</strong> {{ frameFaces.length }}</div>
-        
-        <div class="video-grid" v-if="frameFaces.length > 0">
-          <div v-for="face in frameFaces" :key="face.id" class="video-card">
-            <img :src="`/api/frames/${face.frame_id}/image`" class="video-thumbnail" style="height:150px">
-            <div class="video-info">
-              <div style="font-size:12px;color:#71717a">置信度：{{ (face.confidence * 100).toFixed(1) }}%</div>
-              <div style="font-size:12px;color:#71717a" v-if="face.cluster_id">聚类：#{{ face.cluster_id }}</div>
-              <div style="font-size:12px;color:#71717a" v-if="face.actor_name">角色：{{ face.actor_name }}</div>
-              <div style="font-size:11px;color:#3f3f46;margin-top:8px;font-family:monospace">
-                位置：[{{ face.bounding_box?.[0]?.toFixed(0) }}, {{ face.bounding_box?.[1]?.toFixed(0) }}, {{ face.bounding_box?.[2]?.toFixed(0) }}, {{ face.bounding_box?.[3]?.toFixed(0) }}]
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty-state">
-          <div class="icon">👤</div>
-          <div>该帧未检测到人脸</div>
-        </div>
-      </div>
-    </el-dialog>
   </div>
-
-  <script>
-    const { createApp, ref, reactive, onMounted, watch, computed } = Vue;
-    
-    const app = createApp({
-      setup() {
-        const api = axios.create({ baseURL: '' });
-        const { ElMessage } = ElementPlus;
-        const page = ref('dashboard');
-        const loading = ref(false);
-        const showDialog = ref(false);
-        const showDirSelector = ref(false);
-        const showFaceDialog = ref(false);
-        const reExtracting = ref(false);
-        
-        // 数据
-        const stats = reactive({
-          total_videos: 0, pending_videos: 0, processing_videos: 0,
-          ready_videos: 0, completed_videos: 0,
-          pending_tasks: 0, running_tasks: 0, online_workers: 0
-        });
-        const systemDirs = ref([]);
-        const dirs = ref([]);
-        const videos = ref([]);
-        const tasks = ref([]);
-        const workers = ref([]);
-        const reviewList = ref([]);
-        const frames = ref([]);
-        const currentVideo = ref(null);
-        const currentFrame = ref(null);
-        const videoTasks = ref([]);
-        const frameFaces = ref([]);
-        
-        // 选择状态
-        const selectedDirs = ref([]);
-        const selectedVideos = ref([]);
-        const filter = ref('');
-        const reviewNames = reactive({});
-        const clusterVideoFilter = ref('');
-        const clusters = ref([]);
-        
-        // 工具函数
-        const statusText = (s) => ({
-          pending: '待处理', processing: '抽帧中', featured: '特征提取中',
-          clustered: '聚类中', tagged: '打标中', ready: '待采纳', completed: '已完成', failed: '失败'
-        })[s] || s;
-        
-        const taskTypeText = (t) => ({ feature: '特征提取', cluster: '聚类', tag: '打标' })[t] || t;
-        const taskStatusText = (s) => ({ pending: '待分配', assigned: '已分配', running: '运行中', completed: '完成', failed: '失败' })[s] || s;
-        const formatTime = (t) => t ? new Date(t).toLocaleString() : '-';
-        const calcDuration = (t) => {
-          if (!t.started_at || !t.completed_at) return '-';
-          const duration = (new Date(t.completed_at) - new Date(t.started_at)) / 1000;
-          return duration < 60 ? duration.toFixed(1) + 's' : (duration/60).toFixed(1) + 'm';
-        };
-        
-        // API 调用
-        const loadStats = async () => {
-          try {
-            const res = await api.get('/api/dashboard/stats');
-            Object.assign(stats, res.data);
-          } catch (e) { console.error('loadStats error:', e); }
-        };
-        
-        const loadDirs = async () => {
-          try {
-            const res = await api.get('/api/videos/directories');
-            dirs.value = res.data.directories || [];
-          } catch (e) { console.error('loadDirs error:', e); }
-        };
-        
-        const loadSystemDirs = async () => {
-          try {
-            const res = await api.get('/api/videos/system-directories?base_path=/media');
-            systemDirs.value = res.data.directories || [];
-          } catch (e) { console.error('loadSystemDirs error:', e); }
-        };
-        
-        const confirmDirSelection = () => {
-          showDirSelector.value = false;
-        };
-        
-        const loadVideos = async () => {
-          loading.value = true;
-          try {
-            const url = filter.value ? `/api/videos?status=${filter.value}` : '/api/videos';
-            const res = await api.get(url);
-            videos.value = res.data;
-          } catch (e) { console.error('loadVideos error:', e); }
-          loading.value = false;
-        };
-        
-        const loadTasks = async () => {
-          try { tasks.value = (await api.get('/api/tasks')).data; } catch (e) {}
-        };
-        
-        const loadWorkers = async () => {
-          try { workers.value = (await api.get('/api/workers')).data; } catch (e) {}
-        };
-        
-        const loadClusters = async () => {
-          try {
-            const url = clusterVideoFilter.value ? `/api/clusters?video_id=${clusterVideoFilter.value}` : '/api/clusters';
-            const res = await api.get(url);
-            clusters.value = res.data.map(c => ({ ...c, editing: false }));
-          } catch (e) { console.error('loadClusters error:', e); }
-        };
-        
-        const saveClusterName = async (cluster) => {
-          try {
-            await api.post(`/api/clusters/${cluster.id}/name`, { name: cluster.name });
-            ElMessage.success('命名已保存');
-            cluster.editing = false;
-            loadClusters();
-          } catch (e) { ElMessage.error('保存失败'); }
-        };
-        
-        const viewClusterFaces = (cluster) => {
-          // TODO: 打开弹窗显示该聚类的所有人脸
-          ElMessage.info(`查看聚类 #${cluster.id} 的 ${cluster.face_count} 张人脸`);
-        };
-        
-        const loadReview = async () => {
-          try {
-            const res = await api.get('/api/videos?status=ready');
-            reviewList.value = res.data;
-            reviewList.value.forEach(v => { if (!reviewNames[v.id]) reviewNames[v.id] = v.recommended_name || ''; });
-          } catch (e) {}
-        };
-        
-        // 交互函数
-        const refreshAll = () => {
-          loadStats();
-          loadDirs();
-          loadVideos();
-        };
-        
-        const toggleDir = (path) => {
-          const i = selectedDirs.value.indexOf(path);
-          if (i > -1) selectedDirs.value.splice(i, 1);
-          else selectedDirs.value.push(path);
-        };
-        
-        const scanDirs = async () => {
-          if (selectedDirs.value.length === 0) { 
-            ElMessage.warning('请先选择目录'); 
-            return; 
-          }
-          try {
-            await api.post('/api/videos/scan', { directories: selectedDirs.value });
-            ElMessage.success('扫描完成');
-            selectedDirs.value = [];
-            showDirSelector.value = false;
-            refreshAll();
-          } catch (e) { 
-            console.error('scan error:', e);
-            ElMessage.error('扫描失败：' + (e.response?.data?.detail || e.message)); 
-          }
-        };
-        
-        const toggleVideo = (id) => {
-          const i = selectedVideos.value.indexOf(id);
-          if (i > -1) selectedVideos.value.splice(i, 1);
-          else selectedVideos.value.push(id);
-        };
-        
-        const startProcess = async () => {
-          if (selectedVideos.value.length === 0) return;
-          try {
-            await api.post('/api/videos/start-process', { video_ids: selectedVideos.value });
-            ElMessage.success('已开始处理');
-            selectedVideos.value = [];
-            loadVideos();
-            loadStats();
-          } catch (e) { ElMessage.error('处理失败'); }
-        };
-        
-        const openVideo = async (video) => {
-          try {
-            const [vRes, fRes, tRes] = await Promise.all([
-              api.get(`/api/videos/${video.id}`),
-              api.get(`/api/videos/${video.id}/frames`),
-              api.get(`/api/videos/${video.id}/tasks`)
-            ]);
-            currentVideo.value = vRes.data;
-            frames.value = fRes.data;
-            videoTasks.value = tRes.data;
-            showDialog.value = true;
-          } catch (e) { ElMessage.error('加载失败'); }
-        };
-        
-        const totalFaces = computed(() => {
-          return frames.value.reduce((sum, f) => sum + (f.face_count || 0), 0);
-        });
-        
-        const viewFrameFaces = async (frame) => {
-          try {
-            currentFrame.value = frame;
-            const res = await api.get(`/api/frames/${frame.id}/faces`);
-            frameFaces.value = res.data;
-            showFaceDialog.value = true;
-          } catch (e) { ElMessage.error('加载失败'); }
-        };
-        
-        const groupedTasks = computed(() => {
-          const groups = {
-            feature: { type: 'feature', name: '特征提取', total: 0, completed: 0 },
-            cluster: { type: 'cluster', name: '人脸聚类', total: 0, completed: 0 },
-            tag: { type: 'tag', name: '场景打标', total: 0, completed: 0 }
-          };
-          videoTasks.value.forEach(t => {
-            if (groups[t.task_type]) {
-              groups[t.task_type].total++;
-              if (t.status === 'completed') groups[t.task_type].completed++;
-            }
-          });
-          return Object.values(groups).filter(g => g.total > 0);
-        });
-        
-        const getTaskColor = (type) => {
-          const colors = { feature: '#a855f7', cluster: '#ec4899', tag: '#06b6d4' };
-          return colors[type] || '#667eea';
-        };
-        
-        const reExtract = async () => {
-          if (!currentVideo.value) return;
-          reExtracting.value = true;
-          try {
-            const res = await api.post(`/api/videos/${currentVideo.value.id}/re-extract`);
-            ElMessage.success(`重新抽帧完成，共 ${res.data.frames_extracted} 帧`);
-            // 重新加载视频详情和帧
-            const [vRes, fRes] = await Promise.all([
-              api.get(`/api/videos/${currentVideo.value.id}`),
-              api.get(`/api/videos/${currentVideo.value.id}/frames`)
-            ]);
-            currentVideo.value = vRes.data;
-            frames.value = fRes.data;
-            loadVideos();
-            loadStats();
-          } catch (e) { 
-            console.error('reExtract error:', e);
-            ElMessage.error('重新抽帧失败: ' + (e.response?.data?.detail || e.message));
-          }
-          reExtracting.value = false;
-        };
-        
-        const adopt = async (id) => {
-          try {
-            await api.post('/api/videos/adopt', {
-              video_ids: [id],
-              custom_names: reviewNames[id] ? { [id]: reviewNames[id] } : null
-            });
-            ElMessage.success('采纳成功');
-            loadReview();
-            loadStats();
-          } catch (e) { ElMessage.error('采纳失败'); }
-        };
-        
-        const retryTask = async (id) => {
-          try { await api.post(`/api/tasks/${id}/retry`); ElMessage.success('已重试'); loadTasks(); } catch (e) {}
-        };
-        
-        // 页面切换加载
-        watch(page, (p) => {
-          if (p === 'dashboard') loadStats();
-          if (p === 'videos') { loadSystemDirs(); loadDirs(); loadVideos(); }
-          if (p === 'clusters') { loadVideos(); loadClusters(); }
-          if (p === 'review') loadReview();
-          if (p === 'tasks') loadTasks();
-          if (p === 'workers') loadWorkers();
-        });
-        
-        watch(filter, loadVideos);
-        
-        onMounted(() => {
-          loadStats();
-          setInterval(loadStats, 30000);
-        });
-        
-        return {
-          page, loading, showDialog, showDirSelector, showFaceDialog, reExtracting, stats, systemDirs, dirs, videos, tasks, workers,
-          reviewList, frames, currentVideo, currentFrame, videoTasks, frameFaces, selectedDirs, selectedVideos, filter, reviewNames,
-          clusterVideoFilter, clusters,
-          statusText, taskTypeText, taskStatusText, formatTime, calcDuration, refreshAll, loadSystemDirs, toggleDir, confirmDirSelection, scanDirs,
-          toggleVideo, startProcess, openVideo, reExtract, loadReview, adopt, loadTasks, retryTask, loadWorkers,
-          loadClusters, saveClusterName, viewClusterFaces, groupedTasks, getTaskColor, totalFaces, viewFrameFaces
-        };
-      }
-    });
-    
-    app.use(ElementPlus);
-    app.mount('#app');
-  </script>
+  
+  <script src="/static/app.js"></script>
 </body>
 </html>

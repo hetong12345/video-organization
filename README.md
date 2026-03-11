@@ -9,8 +9,6 @@
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen.svg)](https://vuejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [架构设计](#-架构设计) • [配置说明](#-配置说明) • [故障排查](#-故障排查)
-
 </div>
 
 ---
@@ -20,7 +18,7 @@
 这是一套**完整的视频 AI 整理系统**，通过先进的人脸识别和深度学习技术，自动为视频文件生成结构化命名和标签。
 
 **核心优势**：
-- 🚀 **NAS 与 Worker 分离架构** - 充分利用不同机器的 GPU 资源
+- 🚀 **分布式架构** - NAS 与 Worker 分离，充分利用 GPU 资源
 - 🎯 **精准人脸检测** - InsightFace 检测女性正脸
 - 🧠 **智能聚类** - HDBSCAN 算法自动识别相同演员
 - ✨ **AI 场景打标** - Qwen2.5 大模型生成场景标签
@@ -35,9 +33,15 @@
 
 ---
 
-## ✨ 功能特性
+## ✨ 核心功能
 
-### 核心功能
+### 工作流程
+
+```
+视频入库 → 自动扫描 → 智能抽帧 → 特征提取 → 人脸聚类 → 场景打标 → 推荐命名 → 用户审核 → 完成
+```
+
+### 功能模块
 
 | 功能 | 技术栈 | 说明 |
 |------|--------|------|
@@ -49,6 +53,7 @@
 | 🏷️ **场景打标** | Qwen2.5-7B | LLM 生成场景/服装标签 |
 | 📝 **推荐命名** | AI 生成 | `[演员]_[标签]_[原名]` 格式 |
 | 📊 **任务监控** | 实时状态 | 可视化的任务进度和 Worker 状态 |
+| 👥 **演员管理** | 跨视频匹配 | 识别并合并同一演员的不同聚类 |
 
 ### 技术亮点
 
@@ -62,7 +67,7 @@
 
 ## 🏗️ 架构设计
 
-### 系统架构图
+### 系统架构
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -115,16 +120,6 @@ graph TD
     M --> N[等待审核]
     N --> O[用户采纳]
     O --> P[文件整理完成]
-```
-
-### 任务状态机
-
-```
-PENDING ──→ ASSIGNED ──→ RUNNING ──→ COMPLETED
-   │                                       │
-   │                                       │
-   └────────── FAILED ←────────────────────┘
-              (可重试)
 ```
 
 ---
@@ -284,50 +279,6 @@ docker logs -f video-org-worker
 
 ---
 
-## ⚙️ 配置说明
-
-### NAS 端环境变量
-
-| 变量名 | 默认值 | 说明 | 建议值 |
-|--------|--------|------|--------|
-| `DATABASE_URL` | `postgresql://postgres:postgres@db:5432/video_org` | 数据库连接 | 无需修改 |
-| `RAW_VIDEO_DIR` | `/media/raw` | 原始视频目录 | 你的视频路径 |
-| `PROCESSED_VIDEO_DIR` | `/media/processed` | 处理后视频目录 | 你的输出路径 |
-| `CACHE_DIR` | `/cache` | 缓存目录 | SSD 路径 |
-| `FRAME_CACHE_DIR` | `/cache/frames` | 抽帧图片缓存 | SSD 路径 |
-| `MIN_FACE_RATIO` | `0.1` | 最小人脸占比 | 0.05-0.2 |
-| `MAX_RETRY_COUNT` | `3` | 任务最大重试次数 | 3-5 |
-| `CLUSTER_MIN_SAMPLES` | `5` | 聚类最小样本数 | 3-10 |
-
-### Worker 端环境变量
-
-| 变量名 | 默认值 | 说明 | 建议值 |
-|--------|--------|------|--------|
-| `NAS_URL` | `http://localhost:8000` | NAS 服务地址 | 你的 NAS IP |
-| `WORKER_ID` | `worker-{hostname}` | Worker 唯一标识 | 自定义名称 |
-| `MAX_CONCURRENT` | `2` | 最大并发任务数 | GPU: 2-4, CPU: 1 |
-| `ENABLED_TASKS` | `feature,cluster,tag` | 启用的任务类型 | 按需选择 |
-| `HEARTBEAT_INTERVAL` | `30` | 心跳间隔 (秒) | 30 |
-| `POLL_INTERVAL` | `5` | 任务拉取间隔 (秒) | 5 |
-| `FEATURE_MODEL_PATH` | `buffalo_l` | 人脸特征模型 | buffalo_l |
-| `LLM_MODEL_PATH` | `Qwen/Qwen2.5-7B-Instruct` | LLM 模型 | 根据显存选择 |
-
-### 任务类型说明
-
-| 任务类型 | 说明 | GPU 加速 | 推荐配置 |
-|----------|------|----------|----------|
-| `feature` | 人脸检测 + 特征提取 | ✅ 是 | 必选 |
-| `cluster` | 人脸聚类 | ❌ 否 (CPU) | 必选 |
-| `tag` | 场景打标 | ⚠️ 可选 | 有 GPU 可选 |
-
-**无 GPU 环境建议**：
-```bash
-ENABLED_TASKS=feature,cluster
-# 禁用 tag 任务（LLM 在 CPU 上很慢）
-```
-
----
-
 ## 📊 使用指南
 
 ### 完整工作流程
@@ -376,6 +327,7 @@ ENABLED_TASKS=feature,cluster
 - 切换到 "👥 人脸聚类"
 - 查看每个聚类（角色）
 - 预览人脸图片
+- 点击 "🔍 找相似" 查找跨视频的相似聚类
 - 点击 "✏️ 命名" 给角色起名
 
 #### 5. 审核命名
@@ -384,6 +336,50 @@ ENABLED_TASKS=feature,cluster
 2. 查看 AI 生成的推荐命名
 3. 可以修改或直接采纳
 4. 点击 "✓ 采纳" 完成
+
+---
+
+## ⚙️ 配置说明
+
+### NAS 端环境变量
+
+| 变量名 | 默认值 | 说明 | 建议值 |
+|--------|--------|------|--------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@db:5432/video_org` | 数据库连接 | 无需修改 |
+| `RAW_VIDEO_DIR` | `/media/raw` | 原始视频目录 | 你的视频路径 |
+| `PROCESSED_VIDEO_DIR` | `/media/processed` | 处理后视频目录 | 你的输出路径 |
+| `CACHE_DIR` | `/cache` | 缓存目录 | SSD 路径 |
+| `FRAME_CACHE_DIR` | `/cache/frames` | 抽帧图片缓存 | SSD 路径 |
+| `MIN_FACE_RATIO` | `0.1` | 最小人脸占比 | 0.05-0.2 |
+| `MAX_RETRY_COUNT` | `3` | 任务最大重试次数 | 3-5 |
+| `CLUSTER_MIN_SAMPLES` | `5` | 聚类最小样本数 | 3-10 |
+
+### Worker 端环境变量
+
+| 变量名 | 默认值 | 说明 | 建议值 |
+|--------|--------|------|--------|
+| `NAS_URL` | `http://localhost:8000` | NAS 服务地址 | 你的 NAS IP |
+| `WORKER_ID` | `worker-{hostname}` | Worker 唯一标识 | 自定义名称 |
+| `MAX_CONCURRENT` | `2` | 最大并发任务数 | GPU: 2-4, CPU: 1 |
+| `ENABLED_TASKS` | `feature,cluster,tag` | 启用的任务类型 | 按需选择 |
+| `HEARTBEAT_INTERVAL` | `30` | 心跳间隔 (秒) | 30 |
+| `POLL_INTERVAL` | `5` | 任务拉取间隔 (秒) | 5 |
+| `FEATURE_MODEL_PATH` | `buffalo_l` | 人脸特征模型 | buffalo_l |
+| `LLM_MODEL_PATH` | `Qwen/Qwen2.5-7B-Instruct` | LLM 模型 | 根据显存选择 |
+
+### 任务类型说明
+
+| 任务类型 | 说明 | GPU 加速 | 推荐配置 |
+|----------|------|----------|----------|
+| `feature` | 人脸检测 + 特征提取 | ✅ 是 | 必选 |
+| `cluster` | 人脸聚类 | ❌ 否 (CPU) | 必选 |
+| `tag` | 场景打标 | ⚠️ 可选 | 有 GPU 可选 |
+
+**无 GPU 环境建议**：
+```bash
+ENABLED_TASKS=feature,cluster
+# 禁用 tag 任务（LLM 在 CPU 上很慢）
+```
 
 ---
 
@@ -577,7 +573,6 @@ docker volume ls | grep postgres
 ### 相关文档
 
 - [架构设计文档](ARCHITECTURE.md) - 详细的系统架构和技术设计
-- [API 文档](http://localhost:8000/docs) - 完整的 API 接口说明
 
 ### 技术栈
 

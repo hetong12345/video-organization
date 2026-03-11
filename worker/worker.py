@@ -5,10 +5,20 @@ import uuid
 import threading
 import argparse
 import requests
+import logging
 import numpy as np
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 import cv2
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # 提前导入 torch 和量化配置
 try:
@@ -16,11 +26,11 @@ try:
     from transformers import BitsAndBytesConfig
     GPU_AVAILABLE = torch.cuda.is_available()
     if GPU_AVAILABLE:
-        print(f"GPU available: {torch.cuda.get_device_name(0)}")
+        logger.info(f"GPU available: {torch.cuda.get_device_name(0)}")
     else:
-        print("GPU not available, will use CPU")
+        logger.info("GPU not available, will use CPU")
 except ImportError as e:
-    print(f"Failed to import torch: {e}")
+    logger.warning(f"Failed to import torch: {e}")
     GPU_AVAILABLE = False
     BitsAndBytesConfig = None
 
@@ -28,20 +38,17 @@ except ImportError as e:
 try:
     from insightface.app import FaceAnalysis
     INSIGHTFACE_AVAILABLE = True
-    print("InsightFace imported successfully")
+    logger.info("InsightFace imported successfully")
 except ImportError as e:
-    print(f"Failed to import InsightFace: {e}")
+    logger.warning(f"Failed to import InsightFace: {e}")
     INSIGHTFACE_AVAILABLE = False
     FaceAnalysis = None
 
 try:
-    import torch
-    from insightface.app import FaceAnalysis
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     import hdbscan
-    GPU_AVAILABLE = True
+    HDBSCAN_AVAILABLE = True
 except ImportError:
-    GPU_AVAILABLE = False
+    HDBSCAN_AVAILABLE = False
 
 
 class WorkerConfig:
@@ -68,6 +75,16 @@ class WorkerConfig:
         
         enabled_tasks = args.enabled_tasks if args and args.enabled_tasks else os.getenv("ENABLED_TASKS", "feature,cluster,tag")
         self.enabled_tasks = [t.strip() for t in enabled_tasks.split(",")]
+        
+        # 验证配置
+        if not self.nas_url.startswith("http"):
+            raise ValueError(f"Invalid NAS_URL: {self.nas_url}")
+        
+        logger.info(f"Worker config initialized:")
+        logger.info(f"  Worker ID: {self.worker_id}")
+        logger.info(f"  NAS URL: {self.nas_url}")
+        logger.info(f"  Max concurrent tasks: {self.max_concurrent}")
+        logger.info(f"  Enabled tasks: {', '.join(self.enabled_tasks)}")
 
 
 class FeatureExtractor:
@@ -78,13 +95,13 @@ class FeatureExtractor:
         
     def load_model(self):
         if self.model is None:
-            print(f"Loading feature extraction model on {self.device}...")
+            logger.info(f"Loading feature extraction model on {self.device}...")
             self.model = FaceAnalysis(
                 name=self.config.feature_model_path,
                 providers=['CUDAExecutionProvider' if self.device == "cuda" else 'CPUExecutionProvider']
             )
             self.model.prepare(ctx_id=0 if self.device == "cuda" else -1, det_size=(640, 640))
-            print("Feature model loaded.")
+            logger.info("Feature model loaded.")
     
     def extract(self, image_data: bytes) -> Optional[np.ndarray]:
         self.load_model()
@@ -100,30 +117,60 @@ class FeatureExtractor:
         if len(faces) == 0:
             return None
         
-        embedding = faces[0].embedding
-        return embedding / np.linalg.norm(embedding)
+        return faces[0].embedding if hasattr(faces[0], 'embedding') else None
 
 
 class ClusterProcessor:
     def __init__(self, config: WorkerConfig):
         self.config = config
-        self.min_samples = int(os.getenv("CLUSTER_MIN_SAMPLES", "5"))
+        self.min_samples = 2
     
     def cluster(self, embeddings: List[np.ndarray]) -> List[int]:
-        if len(embeddings) < self.min_samples:
-            return list(range(len(embeddings)))
+        n_samples = len(embeddings)
+        
+        if n_samples < 2:
+            return [0] if n_samples > 0 else []
+        
+        if n_samples < 5:
+            return list(range(n_samples))
         
         embeddings_matrix = np.array(embeddings)
         
+        # 动态调整参数
+        min_samples = min(3, max(2, n_samples // 3))
+        min_cluster_size = min(2, max(2, n_samples // 4))
+        
+        logger.info(f"Clustering {n_samples} faces (min_samples={min_samples}, min_cluster_size={min_cluster_size})")
+        
         clusterer = hdbscan.HDBSCAN(
-            min_samples=self.min_samples,
-            min_cluster_size=self.min_samples,
+            min_samples=min_samples,
+            min_cluster_size=min_cluster_size,
             metric='euclidean',
             cluster_selection_method='eom'
         )
         
         labels = clusterer.fit_predict(embeddings_matrix)
         
+        noise_count = sum(1 for l in labels if l == -1)
+        logger.info(f"HDBSCAN result: {len(set(labels))} clusters, {noise_count} noise points")
+        
+        # 如果全是噪声点，使用 K-Means
+        if noise_count == len(labels):
+            logger.warning("All points are noise, falling back to K-Means")
+            from sklearn.cluster import KMeans
+            
+            if n_samples <= 10:
+                k = 1
+            elif n_samples <= 20:
+                k = 2
+            else:
+                k = min(5, n_samples // 4)
+            
+            logger.info(f"K-Means with k={k} for {n_samples} faces")
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(embeddings_matrix)
+        
+        # 重新映射标签
         unique_labels = set(labels)
         label_mapping = {}
         new_label = 0
@@ -142,20 +189,19 @@ class TagGenerator:
         self.config = config
         self.model = None
         self.tokenizer = None
-        self.device = "cuda" if GPU_AVAILABLE and torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if GPU_AVAILABLE else "cpu"
     
     def load_model(self):
         if self.model is None:
-            print(f"Loading LLM model on {self.device}...")
+            logger.info("Loading LLM model...")
+            from transformers import AutoModelForCausalLM, AutoTokenizer
             
-            if self.device == "cuda" and GPU_AVAILABLE and BitsAndBytesConfig:
-                # GPU 模式：使用 4bit 量化
-                print("Using 4-bit quantization for GPU")
+            if GPU_AVAILABLE:
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
                     bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4"
+                    bnb_4bit_use_double_quant=True
                 )
                 
                 self.tokenizer = AutoTokenizer.from_pretrained(
@@ -170,8 +216,7 @@ class TagGenerator:
                     trust_remote_code=True
                 )
             else:
-                # CPU 模式：不量化，直接加载
-                print("Warning: Running LLM on CPU will be very slow!")
+                logger.warning("Running LLM on CPU will be very slow!")
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     self.config.llm_model_path,
                     trust_remote_code=True
@@ -183,7 +228,7 @@ class TagGenerator:
                     trust_remote_code=True,
                     torch_dtype=torch.float32
                 )
-            print("LLM model loaded.")
+            logger.info("LLM model loaded.")
     
     def generate_tags(self, image_data: bytes) -> List[str]:
         self.load_model()
@@ -224,6 +269,7 @@ class Worker:
     def __init__(self, config: Optional[WorkerConfig] = None):
         self.config = config or WorkerConfig()
         self.session = requests.Session()
+        self.session.timeout = 30  # 设置超时时间
         self.running = False
         
         self.feature_extractor = FeatureExtractor(self.config)
@@ -232,107 +278,131 @@ class Worker:
         
         self.executor = ThreadPoolExecutor(max_workers=self.config.max_concurrent)
         self.active_tasks = {}
+        self.tasks_processed = 0
+        self.last_heartbeat_time = 0
     
     def start(self):
-        print(f"Worker {self.config.worker_id} starting...")
-        print(f"NAS URL: {self.config.nas_url}")
-        print(f"Max concurrent tasks: {self.config.max_concurrent}")
-        print(f"Enabled task types: {self.config.enabled_tasks}")
+        logger.info("=" * 60)
+        logger.info(f"Worker {self.config.worker_id} starting...")
+        logger.info("=" * 60)
         
         self.running = True
         
+        # 启动心跳线程
         heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         heartbeat_thread.start()
         
+        # 主任务循环
         self._task_loop()
     
     def stop(self):
+        logger.info("Worker stopping...")
         self.running = False
         self.executor.shutdown(wait=True)
+        logger.info("Worker stopped")
     
     def _heartbeat_loop(self):
+        """心跳循环线程"""
         while self.running:
             try:
                 self._send_heartbeat()
+                self.last_heartbeat_time = time.time()
             except Exception as e:
-                print(f"Heartbeat failed: {e}")
+                logger.error(f"Heartbeat failed: {e}")
             time.sleep(self.config.heartbeat_interval)
     
     def _send_heartbeat(self, status: str = "idle", task_id: Optional[int] = None):
-        response = self.session.post(
-            f"{self.config.nas_url}/api/workers/heartbeat",
-            json={
-                "worker_id": self.config.worker_id,
-                "status": status,
-                "current_task_id": task_id
-            }
-        )
-        response.raise_for_status()
+        """发送心跳"""
+        try:
+            response = self.session.post(
+                f"{self.config.nas_url}/api/workers/heartbeat",
+                json={
+                    "worker_id": self.config.worker_id,
+                    "status": status,
+                    "current_task_id": task_id
+                },
+                timeout=10
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send heartbeat: {e}")
+            raise
     
     def _task_loop(self):
-        print(f"Task loop started for worker {self.config.worker_id}")
+        """主任务循环"""
+        logger.info("Task loop started")
+        
         while self.running:
             try:
+                # 检查是否有空闲槽位
                 if len(self.active_tasks) < self.config.max_concurrent:
-                    print(f"Pulling tasks... (active: {len(self.active_tasks)}, max: {self.config.max_concurrent})")
-                    tasks = self._pull_tasks()
-                    print(f"Pulled {len(tasks)} tasks")
-                    for task in tasks:
-                        print(f"Submitting task {task['id']} (type: {task['task_type']}) to executor")
-                        future = self.executor.submit(self._process_task, task)
-                        self.active_tasks[task["id"]] = future
+                    available_slots = self.config.max_concurrent - len(self.active_tasks)
+                    logger.debug(f"Pulling tasks (available slots: {available_slots})")
+                    
+                    tasks = self._pull_tasks(available_slots)
+                    
+                    if tasks:
+                        logger.info(f"Pulled {len(tasks)} tasks: {[t['id'] for t in tasks]}")
+                        
+                        for task in tasks:
+                            logger.info(f"Processing task {task['id']} (type: {task['task_type']})")
+                            future = self.executor.submit(self._process_task, task)
+                            self.active_tasks[task["id"]] = future
+                    else:
+                        logger.debug("No tasks available")
                 
-                completed = [tid for tid, f in self.active_tasks.items() if f.done()]
-                for tid in completed:
-                    print(f"Task {tid} completed")
-                    del self.active_tasks[tid]
+                # 清理已完成的任务
+                completed_tasks = [tid for tid, f in self.active_tasks.items() if f.done()]
+                for tid in completed_tasks:
+                    try:
+                        self.active_tasks[tid].result()  # 获取结果，检查异常
+                        self.tasks_processed += 1
+                        logger.info(f"Task {tid} completed successfully (total: {self.tasks_processed})")
+                    except Exception as e:
+                        logger.error(f"Task {tid} failed: {e}")
+                    finally:
+                        del self.active_tasks[tid]
                 
             except Exception as e:
-                print(f"Task loop error: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Task loop error: {e}", exc_info=True)
             
             time.sleep(self.config.poll_interval)
+        
+        logger.info("Task loop exited")
     
-    def _pull_tasks(self) -> List[Dict]:
-        task_types = [t.strip() for t in self.config.enabled_tasks if t.strip()]
+    def _pull_tasks(self, max_tasks: int) -> List[Dict]:
+        """拉取任务"""
+        try:
+            task_types = [t.strip() for t in self.config.enabled_tasks if t.strip()]
+            
+            response = self.session.post(
+                f"{self.config.nas_url}/api/tasks/pull",
+                json={
+                    "worker_id": self.config.worker_id,
+                    "task_types": task_types,
+                    "max_tasks": max_tasks
+                },
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            return data.get("tasks", [])
         
-        print(f"Pulling tasks with task_types: {task_types}")
-        
-        response = self.session.post(
-            f"{self.config.nas_url}/api/tasks/pull",
-            json={
-                "worker_id": self.config.worker_id,
-                "task_types": task_types,
-                "max_tasks": self.config.max_concurrent - len(self.active_tasks)
-            }
-        )
-        response.raise_for_status()
-        data = response.json()
-        print(f"Pull tasks response: {data}")
-        return data.get("tasks", [])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to pull tasks: {e}")
+            return []
     
     def _process_task(self, task: Dict):
+        """处理单个任务"""
         task_id = task["id"]
         task_type = task["task_type"]
-        video_id = task.get("video_id", "unknown")
-        
-        print(f"\n{'='*60}")
-        print(f"Processing task {task_id} (type: {task_type}) for video {video_id}")
-        print(f"{'='*60}")
-        
-        # 发送开始通知
-        try:
-            self.session.post(
-                f"{self.config.nas_url}/api/tasks/{task_id}/start",
-                json={"worker_id": self.config.worker_id}
-            )
-        except Exception as e:
-            print(f"Failed to send start notification: {e}")
         
         try:
-            self._send_heartbeat("busy", task_id)
+            # 通知 NAS 任务开始
+            self._notify_task_start(task_id)
             
+            # 根据任务类型处理
             if task_type == "feature":
                 self._process_feature_task(task)
             elif task_type == "cluster":
@@ -340,152 +410,104 @@ class Worker:
             elif task_type == "tag":
                 self._process_tag_task(task)
             else:
-                print(f"Unknown task type: {task_type}")
+                logger.warning(f"Unknown task type: {task_type}")
+                self._notify_task_failed(task_id, f"Unknown task type: {task_type}")
+                return
             
-            # 发送完成通知
-            try:
-                self.session.post(
-                    f"{self.config.nas_url}/api/tasks/{task_id}/complete",
-                    json={"worker_id": self.config.worker_id}
-                )
-            except Exception as e:
-                print(f"Failed to send complete notification: {e}")
-            
-            print(f"✓ Task {task_id} completed successfully\n")
-            
-        except Exception as e:
-            print(f"✗ Task {task_id} failed: {e}")
-            import traceback
-            traceback.print_exc()
-            self._report_failure(task_id, str(e))
+            logger.info(f"Task {task_id} completed successfully")
         
-        self._send_heartbeat("idle")
+        except Exception as e:
+            logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+            self._notify_task_failed(task_id, str(e))
+    
+    def _notify_task_start(self, task_id: int):
+        """通知 NAS 任务开始"""
+        try:
+            self.session.post(
+                f"{self.config.nas_url}/api/tasks/{task_id}/start",
+                json={"worker_id": self.config.worker_id},
+                timeout=10
+            )
+        except Exception as e:
+            logger.warning(f"Failed to notify task start: {e}")
+    
+    def _notify_task_failed(self, task_id: int, error_message: str):
+        """通知 NAS 任务失败"""
+        try:
+            self.session.post(
+                f"{self.config.nas_url}/api/tasks/{task_id}/fail",
+                json={"error_message": error_message},
+                timeout=10
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify task failure: {e}")
     
     def _process_feature_task(self, task: Dict):
-        print(f"Processing feature task {task['id']}")
-        
-        # 情况 1: 任务已经有 face_id，直接处理
-        if "face_id" in task:
-            self._process_existing_face(task)
-        # 情况 2: 任务只有 frame_id，需要先检测人脸
-        elif "frame_id" in task:
-            self._detect_faces_in_frame(task)
-        else:
-            raise ValueError(f"Task {task['id']} missing both face_id and frame_id: {task}")
-    
-    def _process_existing_face(self, task: Dict):
-        """处理已有人脸记录的特征提取"""
-        face_id = task["face_id"]
-        
-        print(f"Processing existing face {face_id}")
-        
-        frame_response = self.session.get(
-            f"{self.config.nas_url}/api/faces/{face_id}"
-        )
-        if frame_response.status_code != 200:
-            raise ValueError(f"Failed to get face {face_id}: {frame_response.text}")
-        
-        frame_data = frame_response.json()
-        frame_id = frame_data["frame_id"]
-        
-        image_response = self.session.get(
-            f"{self.config.nas_url}/api/frames/{frame_id}/image"
-        )
-        image_data = image_response.content
-        
-        embedding = self.feature_extractor.extract(image_data)
-        
-        if embedding is None:
-            raise ValueError("Failed to extract embedding")
-        
-        response = self.session.post(
-            f"{self.config.nas_url}/api/tasks/feature/submit",
-            json={
-                "task_id": task["id"],
-                "face_id": face_id,
-                "embedding": embedding.tolist()
-            }
-        )
-        
-        if response.status_code != 200:
-            raise ValueError(f"Failed to save embedding: {response.text}")
-        
-        print(f"Feature task {task['id']} completed for face {face_id}")
-    
-    def _detect_faces_in_frame(self, task: Dict):
-        """在帧中检测人脸并创建记录"""
-        frame_id = task["frame_id"]
+        """处理特征提取任务"""
+        task_id = task["id"]
+        frame_id = task.get("frame_id")
         video_id = task.get("video_id")
         
-        print(f"Detecting faces in frame {frame_id}")
+        logger.info(f"Processing feature task {task_id} for frame {frame_id}")
         
-        # 检查 insightface 是否可用
         if not INSIGHTFACE_AVAILABLE:
-            raise RuntimeError("InsightFace is not installed. Cannot detect faces.")
+            raise RuntimeError("InsightFace is not available")
         
         # 获取帧图片
-        image_response = self.session.get(
-            f"{self.config.nas_url}/api/frames/{frame_id}/image"
+        response = self.session.get(
+            f"{self.config.nas_url}/api/frames/{frame_id}/image",
+            timeout=30
         )
-        if image_response.status_code != 200:
-            raise ValueError(f"Failed to get frame {frame_id}: {image_response.text}")
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get frame {frame_id}: {response.text}")
         
-        image_data = image_response.content
-        image_array = np.frombuffer(image_data, np.uint8)
-        frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        image_data = response.content
+        faces = self.feature_extractor.extract(image_data)
         
-        if frame is None:
-            raise ValueError(f"Failed to decode frame {frame_id}")
-        
-        # 检测人脸
-        if not hasattr(self, 'face_app') or self.face_app is None:
-            self.face_app = FaceAnalysis(providers=['CPUExecutionProvider'])
-            self.face_app.prepare(ctx_id=0, det_size=(640, 640))
-        
-        faces = self.face_app.get(frame)
-        
-        if len(faces) == 0:
-            print(f"No faces detected in frame {frame_id}")
-            # 标记任务为完成（没有人脸）
-            self.session.post(
-                f"{self.config.nas_url}/api/tasks/{task['id']}/complete",
-                json={"result": {"faces_detected": 0}}
-            )
+        if faces is None:
+            logger.info(f"No faces detected in frame {frame_id}")
+            self._notify_task_complete(task_id, {"faces_detected": 0})
             return
         
-        print(f"Detected {len(faces)} faces in frame {frame_id}")
+        logger.info(f"Detected {len(faces)} faces in frame {frame_id}")
         
         # 为每个人脸创建记录
+        created_count = 0
         for idx, face in enumerate(faces):
-            face_data = {
-                "video_id": video_id,
-                "frame_id": frame_id,
-                "bounding_box": face.bbox.tolist(),
-                "confidence": float(face.det_score),
-                "embedding": face.embedding.tolist() if hasattr(face, 'embedding') else None
-            }
+            try:
+                face_data = {
+                    "video_id": video_id,
+                    "frame_id": frame_id,
+                    "bounding_box": face.bbox.tolist(),
+                    "confidence": float(face.det_score),
+                    "embedding": face.embedding.tolist() if hasattr(face, 'embedding') else None
+                }
+                
+                response = self.session.post(
+                    f"{self.config.nas_url}/api/faces",
+                    json=face_data,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    face_id = response.json()["id"]
+                    logger.debug(f"Created face record {face_id}")
+                    created_count += 1
+                else:
+                    logger.error(f"Failed to create face record: {response.status_code} - {response.text}")
             
-            print(f"Creating face record: {face_data}")
-            print(f"POST to: {self.config.nas_url}/api/faces")
-            
-            response = self.session.post(f"{self.config.nas_url}/api/faces", json=face_data)
-            
-            print(f"Response status: {response.status_code}")
-            print(f"Response body: {response.text}")
-            
-            if response.status_code == 200:
-                face_id = response.json()["id"]
-                print(f"✓ Created face record {face_id} for frame {frame_id}")
-            else:
-                print(f"✗ Failed to create face record: {response.status_code} - {response.text}")
+            except Exception as e:
+                logger.error(f"Error creating face record: {e}")
         
-        # 标记任务为完成
-        self.session.post(
-            f"{self.config.nas_url}/api/tasks/{task['id']}/complete",
-            json={"result": {"faces_detected": len(faces)}}
-        )
+        self._notify_task_complete(task_id, {"faces_detected": len(faces), "faces_created": created_count})
     
     def _process_cluster_task(self, task: Dict):
+        """处理聚类任务"""
+        task_id = task["id"]
+        video_id = task.get("video_id")
+        
+        logger.info(f"Processing cluster task {task_id} for video {video_id}")
+        
         embeddings = []
         face_ids = []
         
@@ -493,35 +515,51 @@ class Worker:
         batch_size = 100
         
         while True:
-            response = self.session.get(
-                f"{self.config.nas_url}/api/faces",
-                params={"has_embedding": True, "skip": page * batch_size, "limit": batch_size}
-            )
+            try:
+                response = self.session.get(
+                    f"{self.config.nas_url}/api/faces",
+                    params={
+                        "has_embedding": True,
+                        "skip": page * batch_size,
+                        "limit": batch_size
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Failed to fetch faces page {page}: {response.status_code}")
+                    break
+                
+                faces = response.json().get("faces", [])
+                if not faces:
+                    break
+                
+                logger.debug(f"Page {page}: Got {len(faces)} faces")
+                
+                for face in faces:
+                    if face.get("embedding") and not face.get("cluster_id"):
+                        try:
+                            embeddings.append(np.array(face["embedding"]))
+                            face_ids.append(face["id"])
+                        except Exception as e:
+                            logger.error(f"Error processing embedding for face {face['id']}: {e}")
+                
+                if len(faces) < batch_size:
+                    break
+                page += 1
             
-            if response.status_code != 200:
+            except Exception as e:
+                logger.error(f"Error fetching faces: {e}")
                 break
-            
-            faces = response.json().get("faces", [])
-            if not faces:
-                break
-            
-            for face in faces:
-                if face.get("embedding") and not face.get("cluster_id"):
-                    emb_response = self.session.get(
-                        f"{self.config.nas_url}/api/faces/{face['id']}/embedding"
-                    )
-                    if emb_response.status_code == 200:
-                        embeddings.append(np.array(emb_response.json()["embedding"]))
-                        face_ids.append(face["id"])
-            
-            if len(faces) < batch_size:
-                break
-            page += 1
+        
+        logger.info(f"Fetched {len(embeddings)} embeddings for clustering")
         
         if not embeddings:
-            print("No embeddings to cluster")
+            logger.warning("No embeddings to cluster")
+            self._notify_task_complete(task_id, {"cluster_results": []})
             return
         
+        # 执行聚类
         labels = self.cluster_processor.cluster(embeddings)
         
         cluster_results = [
@@ -529,92 +567,114 @@ class Worker:
             for i in range(len(face_ids))
         ]
         
-        response = self.session.post(
-            f"{self.config.nas_url}/api/tasks/cluster/submit",
-            json={
-                "task_id": task["id"],
-                "cluster_results": cluster_results
-            }
-        )
-        response.raise_for_status()
-        print(f"Cluster task {task['id']} completed with {len(cluster_results)} faces")
+        # 提交聚类结果
+        try:
+            response = self.session.post(
+                f"{self.config.nas_url}/api/tasks/cluster/submit",
+                json={
+                    "task_id": task_id,
+                    "cluster_results": cluster_results
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            logger.info(f"Cluster task {task_id} completed with {len(cluster_results)} faces clustered")
+            self._notify_task_complete(task_id, {"faces_clustered": len(cluster_results)})
+        
+        except Exception as e:
+            logger.error(f"Failed to submit cluster results: {e}")
+            raise
     
     def _process_tag_task(self, task: Dict):
-        video_id = task["video_id"]
+        """处理打标任务"""
+        task_id = task["id"]
+        video_id = task.get("video_id")
         
-        frames_response = self.session.get(
-            f"{self.config.nas_url}/api/videos/{video_id}/frames"
+        logger.info(f"Processing tag task {task_id} for video {video_id}")
+        
+        # 获取视频帧
+        response = self.session.get(
+            f"{self.config.nas_url}/api/videos/{video_id}/frames",
+            timeout=30
         )
-        frames = frames_response.json()
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get frames for video {video_id}: {response.text}")
         
+        frames = response.json()
         if not frames:
             raise ValueError("No frames found for video")
         
+        # 获取代表性帧
         rep_frame = next((f for f in frames if f.get("is_representative")), frames[0])
+        logger.info(f"Using representative frame {rep_frame['id']}")
         
-        image_response = self.session.get(
-            f"{self.config.nas_url}/api/frames/{rep_frame['id']}/image"
+        # 获取帧图片
+        response = self.session.get(
+            f"{self.config.nas_url}/api/frames/{rep_frame['id']}/image",
+            timeout=30
         )
-        image_data = image_response.content
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get frame image: {response.text}")
         
+        image_data = response.content
+        
+        # 生成标签
         tags = self.tag_generator.generate_tags(image_data)
         
         if not tags:
             tags = ["未知场景"]
         
+        logger.info(f"Generated tags: {', '.join(tags)}")
+        
+        # 提交标签结果
         response = self.session.post(
             f"{self.config.nas_url}/api/tasks/tag/submit",
             json={
-                "task_id": task["id"],
+                "task_id": task_id,
                 "video_id": video_id,
                 "tags": tags
-            }
+            },
+            timeout=30
         )
         response.raise_for_status()
-        print(f"Tag task {task['id']} completed with tags: {tags}")
+        
+        logger.info(f"Tag task {task_id} completed with tags: {', '.join(tags)}")
+        self._notify_task_complete(task_id, {"tags": tags})
     
-    def _report_failure(self, task_id: int, error_message: str):
+    def _notify_task_complete(self, task_id: int, result: Dict):
+        """通知 NAS 任务完成"""
         try:
             self.session.post(
-                f"{self.config.nas_url}/api/tasks/{task_id}/fail",
-                params={"error_message": error_message}
+                f"{self.config.nas_url}/api/tasks/{task_id}/complete",
+                json={"result": result},
+                timeout=10
             )
-            print(f"Reported task {task_id} failure: {error_message}")
         except Exception as e:
-            print(f"Failed to report task failure: {e}")
+            logger.error(f"Failed to notify task completion: {e}")
 
 
-if __name__ == "__main__":
-    # 解析命令行参数
-    parser = argparse.ArgumentParser(description="Video Processing Worker")
-    
-    parser.add_argument("--nas-url", type=str, help="NAS server URL (e.g., http://192.168.88.10:8000)")
-    parser.add_argument("--worker-id", type=str, help="Worker ID (e.g., worker-gpu-1)")
-    parser.add_argument("--max-concurrent", type=int, help="Maximum concurrent tasks")
-    parser.add_argument("--heartbeat-interval", type=int, help="Heartbeat interval in seconds")
-    parser.add_argument("--poll-interval", type=int, help="Task poll interval in seconds")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Video Organization Worker")
+    parser.add_argument("--nas-url", type=str, help="NAS server URL")
+    parser.add_argument("--worker-id", type=str, help="Worker ID")
+    parser.add_argument("--max-concurrent", type=int, help="Max concurrent tasks")
+    parser.add_argument("--heartbeat-interval", type=int, help="Heartbeat interval (seconds)")
+    parser.add_argument("--poll-interval", type=int, help="Poll interval (seconds)")
     parser.add_argument("--feature-model", type=str, help="Feature extraction model path")
     parser.add_argument("--llm-model", type=str, help="LLM model path")
     parser.add_argument("--enabled-tasks", type=str, help="Enabled task types (comma-separated)")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
     
-    args = parser.parse_args()
-    
-    # 打印配置信息
-    config = WorkerConfig(args)
-    print(f"=== Worker Configuration ===")
-    print(f"NAS URL: {config.nas_url}")
-    print(f"Worker ID: {config.worker_id}")
-    print(f"Max Concurrent: {config.max_concurrent}")
-    print(f"Heartbeat Interval: {config.heartbeat_interval}s")
-    print(f"Poll Interval: {config.poll_interval}s")
-    print(f"Feature Model: {config.feature_model_path}")
-    print(f"LLM Model: {config.llm_model_path}")
-    print(f"Enabled Tasks: {config.enabled_tasks}")
-    print(f"============================")
-    
-    worker = Worker(config)
     try:
+        config = WorkerConfig(args)
+        worker = Worker(config)
         worker.start()
     except KeyboardInterrupt:
-        print("\nShutting down...")
-        worker.stop()
+        logger.info("Received interrupt signal")
+    except Exception as e:
+        logger.error(f"Worker failed to start: {e}", exc_info=True)
+        sys.exit(1)

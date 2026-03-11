@@ -100,12 +100,21 @@ def submit_feature(request: FeatureSubmitRequest, db: Session = Depends(get_db))
     
     video = db.query(Video).filter(Video.id == task.video_id).first()
     if video:
-        unprocessed_faces = db.query(Face).join(Frame).filter(
-            Frame.video_id == video.id,
-            Face.embedding == None
+        # 统计该视频已完成特征提取的人脸数量（直接查询 Face 表）
+        featured_faces = db.query(Face).filter(
+            Face.video_id == video.id,
+            Face.embedding != None
         ).count()
         
-        if unprocessed_faces == 0:
+        # 统计该视频总共有多少人脸
+        total_faces = db.query(Face).filter(
+            Face.video_id == video.id
+        ).count()
+        
+        print(f"Video {video.id}: {featured_faces}/{total_faces} faces have embeddings")
+        
+        # 当所有人脸都完成特征提取，或者至少完成了 80% 时，创建聚类任务
+        if total_faces > 0 and (featured_faces == total_faces or featured_faces >= total_faces * 0.8):
             video.status = VideoStatus.FEATURED
             
             # 创建聚类任务
@@ -121,10 +130,41 @@ def submit_feature(request: FeatureSubmitRequest, db: Session = Depends(get_db))
                     video_id=video.id
                 )
                 db.add(cluster_task)
-                print(f"Created cluster task for video {video.id}")
+                print(f"Created cluster task for video {video.id} ({featured_faces}/{total_faces} faces)")
     
     db.commit()
     return {"success": True}
+
+
+@router.post("/cluster/check-and-create")
+def check_and_create_cluster_tasks(db: Session = Depends(get_db)):
+    """检查并创建缺失的聚类任务（用于修复历史数据）"""
+    from app.models import VideoStatus
+    
+    # 查找所有已完成特征提取但没有聚类任务的视频
+    featured_videos = db.query(Video).filter(
+        Video.status == VideoStatus.FEATURED
+    ).all()
+    
+    created_count = 0
+    for video in featured_videos:
+        existing_cluster_task = db.query(Task).filter(
+            Task.video_id == video.id,
+            Task.task_type == TaskType.CLUSTER
+        ).first()
+        
+        if not existing_cluster_task:
+            cluster_task = Task(
+                task_type=TaskType.CLUSTER,
+                status=TaskStatus.PENDING,
+                video_id=video.id
+            )
+            db.add(cluster_task)
+            print(f"Created missing cluster task for video {video.id}")
+            created_count += 1
+    
+    db.commit()
+    return {"success": True, "created_tasks": created_count}
 
 
 @router.post("/cluster/submit")
@@ -133,32 +173,84 @@ def submit_cluster(request: ClusterSubmitRequest, db: Session = Depends(get_db))
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    if not task.video_id:
+        raise HTTPException(status_code=400, detail="Task has no video_id")
+    
+    # 打印接收到的数据
+    print(f"Cluster submit request: task_id={request.task_id}, video_id={task.video_id}, cluster_results count={len(request.cluster_results)}")
+    if request.cluster_results:
+        print(f"  First few results: {request.cluster_results[:3]}")
+    
+    # 按 label 分组人脸
+    from collections import defaultdict
+    label_to_faces = defaultdict(list)
+    
     for result in request.cluster_results:
         face = db.query(Face).filter(Face.id == result["face_id"]).first()
-        if face:
-            face.cluster_id = result["cluster_id"]
-            
-            cluster = db.query(Cluster).filter(Cluster.id == result["cluster_id"]).first()
-            if not cluster:
-                cluster = Cluster(
-                    id=result["cluster_id"],
-                    video_id=task.video_id,
-                    face_count=0
-                )
-                db.add(cluster)
-            cluster.face_count += 1
+        if face and face.video_id == task.video_id:
+            # 跳过噪声点（label = -1）
+            if result["cluster_id"] == -1:
+                print(f"  Skipping face {result['face_id']} (noise point, label=-1)")
+                continue
+            print(f"  Adding face {result['face_id']} to cluster label={result['cluster_id']}")
+            label_to_faces[result["cluster_id"]].append(face)
+    
+    print(f"Video {task.video_id}: Creating {len(label_to_faces)} clusters from {len(request.cluster_results)} faces")
+    
+    # 为每个 label 创建聚类
+    for label, faces in label_to_faces.items():
+        # 查找是否已存在该 label 的聚类
+        cluster = db.query(Cluster).filter(
+            Cluster.video_id == task.video_id,
+            Cluster.name == f"cluster_{label}"
+        ).first()
+        
+        if not cluster:
+            # 创建新聚类
+            cluster = Cluster(
+                video_id=task.video_id,
+                name=f"cluster_{label}",
+                face_count=0
+            )
+            db.add(cluster)
+            db.flush()  # 获取 cluster.id
+            print(f"Created cluster {cluster.id} (label={label}) for video {task.video_id}")
+        
+        # 更新人脸的 cluster_id
+        for face in faces:
+            face.cluster_id = cluster.id
+        
+        # 更新聚类的人脸数量和代表性特征
+        cluster.face_count = len(faces)
+        
+        # 计算平均 embedding
+        embeddings = [face.embedding for face in faces if face.embedding is not None]
+        if embeddings:
+            import numpy as np
+            avg_embedding = np.mean(embeddings, axis=0)
+            cluster.representative_embedding = avg_embedding
+            # 设置代表性人脸（第一个有 embedding 的人脸）
+            if not cluster.representative_face_id:
+                for face in faces:
+                    if face.embedding is not None:
+                        cluster.representative_face_id = face.id
+                        break
     
     task.status = TaskStatus.COMPLETED
     task.completed_at = datetime.utcnow()
     
-    videos = db.query(Video).filter(Video.status == VideoStatus.FEATURED).all()
-    for video in videos:
-        unclustered = db.query(Face).join(Frame).filter(
-            Frame.video_id == video.id,
-            Face.cluster_id == None
-        ).count()
-        if unclustered == 0:
+    # 检查是否还有未聚类的人脸
+    unclustered = db.query(Face).filter(
+        Face.video_id == task.video_id,
+        Face.cluster_id == None,
+        Face.embedding != None  # 只检查有 embedding 的人脸
+    ).count()
+    
+    if unclustered == 0:
+        video = db.query(Video).filter(Video.id == task.video_id).first()
+        if video:
             video.status = VideoStatus.CLUSTERED
+            print(f"Video {task.video_id} status updated to CLUSTERED")
     
     db.commit()
     return {"success": True}
@@ -221,31 +313,22 @@ def _check_video_ready(video: Video, db: Session):
 
 @router.post("/{task_id}/fail")
 def fail_task(task_id: int, error_message: str = "", db: Session = Depends(get_db)):
+    """Worker 报告任务失败或手动标记失败"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
     task.status = TaskStatus.FAILED
     task.error_message = error_message
+    task.worker_id = None
     task.retry_count += 1
     
+    # 如果重试次数未超限，重新设为 PENDING
     if task.retry_count < settings.MAX_RETRY_COUNT:
         task.status = TaskStatus.PENDING
     
     db.commit()
-    return {"success": True}
-
-
-@router.post("/{task_id}/fail")
-def fail_task(task_id: int, error_message: str, db: Session = Depends(get_db)):
-    """Worker 报告任务失败"""
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if task:
-        task.status = TaskStatus.FAILED
-        task.error_message = error_message
-        task.worker_id = None
-        db.commit()
-        print(f"Task {task_id} marked as failed: {error_message}")
+    print(f"Task {task_id} marked as failed: {error_message} (retry {task.retry_count})")
     return {"success": True}
 
 
@@ -299,10 +382,37 @@ def complete_task(task_id: int, request: dict, db: Session = Depends(get_db)):
             ).count()
             
             if pending_feature_tasks == 0:
-                # 所有特征提取完成，更新视频状态为 CLUSTERED
+                # 所有特征提取完成，检查并创建聚类任务
                 video = db.query(Video).filter(Video.id == video_id).first()
                 if video:
-                    video.status = VideoStatus.CLUSTERED
-                    db.commit()
-                    print(f"Video {video_id} all features extracted, status updated to CLUSTERED")
+                    # 统计已完成特征提取的人脸
+                    featured_faces = db.query(Face).filter(
+                        Face.video_id == video_id,
+                        Face.embedding != None
+                    ).count()
+                    
+                    total_faces = db.query(Face).filter(
+                        Face.video_id == video_id
+                    ).count()
+                    
+                    print(f"Video {video_id}: All feature tasks done. {featured_faces}/{total_faces} faces have embeddings")
+                    
+                    # 如果有足够的人脸数据，创建聚类任务
+                    if total_faces > 0 and (featured_faces == total_faces or featured_faces >= total_faces * 0.8):
+                        video.status = VideoStatus.FEATURED
+                        
+                        existing_cluster_task = db.query(Task).filter(
+                            Task.video_id == video_id,
+                            Task.task_type == TaskType.CLUSTER
+                        ).first()
+                        
+                        if not existing_cluster_task:
+                            cluster_task = Task(
+                                task_type=TaskType.CLUSTER,
+                                status=TaskStatus.PENDING,
+                                video_id=video_id
+                            )
+                            db.add(cluster_task)
+                            print(f"Created cluster task for video {video_id} ({featured_faces}/{total_faces} faces)")
+                            db.commit()
     return {"success": True}
